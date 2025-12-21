@@ -495,7 +495,7 @@
       "gencad": "",
       "idf": "",
       "netlist": "",
-      "plot": "",
+      "plot": "plots",
       "pos_files": "",
       "specctra_dsn": "1551-RAMBoard2-FirstBank.dsn",
       "step": "",
