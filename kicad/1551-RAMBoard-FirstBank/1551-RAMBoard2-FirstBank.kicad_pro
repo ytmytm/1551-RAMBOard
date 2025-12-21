@@ -333,7 +333,7 @@
     "pinned_symbol_libs": []
   },
   "meta": {
-    "filename": "1541-RAMBoard2-FirstBank.kicad_pro",
+    "filename": "1551-RAMBoard2-FirstBank.kicad_pro",
     "version": 1
   },
   "net_settings": {
@@ -366,7 +366,7 @@
       "gencad": "",
       "idf": "",
       "netlist": "",
-      "specctra_dsn": "1541-RAMBoard2-FirstBank.dsn",
+      "specctra_dsn": "1551-RAMBoard2-FirstBank.dsn",
       "step": "",
       "vrml": ""
     },

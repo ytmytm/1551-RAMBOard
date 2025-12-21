@@ -10,7 +10,7 @@
     (rev "2")
     (company "YTM Enterprises")
     (comment 1 "Maciej Witkowiak, <ytm@elysium.pl>")
-    (comment 2 "1541-II RAM and ROM expansion")
+    (comment 2 "1551 RAM and ROM expansion")
   )
 
   (lib_symbols

@@ -1,6 +1,10 @@
 These are my notes, a project diary. I highly recommend this practice!
 
 (continuing from 1571-TrackCacheROM)
+(continuing from 1541-RAMBOard-FirstBank)
+
+[2025-12-20]
+Let's try to do the same for 1551!
 
 [2025-07-04]
 Added signature 'RAM' and a jump table at $A000. This should make a very fast parallel loader
