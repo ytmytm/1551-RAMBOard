@@ -1,0 +1,229 @@
+diff --git a/vice/src/drive/drive-check.c b/vice/src/drive/drive-check.c
+index 7c26458e52..00ee9fe46c 100644
+--- a/vice/src/drive/drive-check.c
++++ b/vice/src/drive/drive-check.c
+@@ -195,6 +195,7 @@ int drive_check_expansion(int drive_type)
+     case DRIVE_TYPE_1570:
+     case DRIVE_TYPE_1571:
+     case DRIVE_TYPE_1571CR:
++    case DRIVE_TYPE_1551:
+         return 1;
+     }
+     return 0;
+@@ -245,6 +246,7 @@ int drive_check_expansion8000(int drive_type)
+     case DRIVE_TYPE_1540:
+     case DRIVE_TYPE_1541:
+     case DRIVE_TYPE_1541II:
++    case DRIVE_TYPE_1551:
+         return 1;
+     }
+     return 0;
+diff --git a/vice/src/drive/tcbm/mem1551.c b/vice/src/drive/tcbm/mem1551.c
+index cd3f5c7663..2947aac111 100644
+--- a/vice/src/drive/tcbm/mem1551.c
++++ b/vice/src/drive/tcbm/mem1551.c
+@@ -27,16 +27,23 @@
+ #include "vice.h"
+ 
+ #include "drivemem.h"
++#include "driverom.h"
+ #include "drivetypes.h"
+ #include "glue1551.h"
+ #include "mem1551.h"
+ #include "tpid.h"
++#include "tcbmrom.h"
+ #include "types.h"
+ 
+ 
+ static uint8_t drive_read_rom(diskunit_context_t *drv, uint16_t address)
+ {
+-    return drv->cpu->cpu_last_data = drv->rom[address & 0x7fff];
++    return drv->cpu->cpu_last_data = drv->trap_rom[address & 0x7fff];
++}
++
++static uint8_t drive_peek_rom(diskunit_context_t *drv, uint16_t address)
++{
++    return drv->trap_rom[address & 0x7fff];
+ }
+ 
+ static uint8_t drive_read_1551ram(diskunit_context_t *drv, uint16_t address)
+@@ -77,9 +84,42 @@ static void drive_store_zero(diskunit_context_t *drv, uint16_t address, uint8_t
+     drv->drive_ram[(uint32_t)(address & 0xff)] = value;
+ }
+ 
++static uint8_t drive_read_ram(diskunit_context_t *drv, uint16_t address)
++{
++    return drv->cpu->cpu_last_data = drv->drive_ram[address];
++}
++
++static void drive_store_ram(diskunit_context_t *drv, uint16_t address, uint8_t value)
++{
++    drv->cpu->cpu_last_data = value;
++    drv->drive_ram[address] = value;
++}
++
++static uint8_t drive_peek_ram(diskunit_context_t *drv, uint16_t address)
++{
++    return drv->drive_ram[address];
++}
++
++static uint8_t drive_read_free(diskunit_context_t *drv, uint16_t address)
++{
++    return drv->cpu->cpu_last_data;
++}
++
++static void drive_store_free(diskunit_context_t *drv, uint16_t address, uint8_t value)
++{
++    drv->cpu->cpu_last_data = value;
++    return;
++}
++
++static uint8_t drive_peek_free(diskunit_context_t *drv, uint16_t address)
++{
++    return drv->cpu->cpu_last_data;
++}
++
+ void mem1551_init(struct diskunit_context_s *drv, unsigned int type)
+ {
+     drivecpud_context_t *cpud = drv->cpud;
++    unsigned int rom_size;
+ 
+     switch (type) {
+     case DRIVE_TYPE_1551:
+@@ -87,7 +127,46 @@ void mem1551_init(struct diskunit_context_s *drv, unsigned int type)
+         drivemem_set_func(cpud, 0x00, 0x01, drive_read_zero, drive_store_zero, NULL, drv->drive_ram, 0x000207fd);
+         drivemem_set_func(cpud, 0x01, 0x08, drive_read_1551ram, drive_store_1551ram, NULL, &drv->drive_ram[0x0100], 0x000207fd);
+         drivemem_set_func(cpud, 0x40, 0x80, tpid_read, tpid_store, tpid_peek, NULL, 0);
+-        drivemem_set_func(cpud, 0xc0, 0x100, drive_read_rom, NULL, NULL, &drv->trap_rom[0x4000], 0xc000fffd);
++        
++        rom_size = tcbmrom_get_1551_size();
++        
++        if (rom_size == DRIVE_ROM1551_SIZE) {
++            /* 16K ROM: only at 0xc000-0xffff */
++            if (drv->drive_ram8_enabled) {
++                /* Expansion memory enabled: 0x8000-0x9fff is RAM, 0xa000-0xbfff is empty/free, 0xc000-0xffff is ROM */
++                drivemem_set_func(cpud, 0x80, 0xa0, drive_read_ram, drive_store_ram, drive_peek_ram, &drv->drive_ram[0x8000], 0);
++                drivemem_set_func(cpud, 0xa0, 0xc0, drive_read_free, drive_store_free, drive_peek_free, NULL, 0);
++            } else {
++                /* No expansion memory: 0x8000-0xbfff is empty/free, 0xc000-0xffff is ROM */
++                drivemem_set_func(cpud, 0x80, 0xc0, drive_read_free, drive_store_free, drive_peek_free, NULL, 0);
++            }
++            /* ROM at 0xc000-0xffff (16K ROM) */
++            drivemem_set_func(cpud, 0xc0, 0x100, drive_read_rom, NULL, drive_peek_rom, &drv->trap_rom[0x4000], 0xc000fffd);
++        } else if (rom_size == DRIVE_ROM_SIZE) {
++            /* 32K ROM: at 0x8000-0xffff (or 0xa000-0xffff if RAM expansion enabled) */
++            if (drv->drive_ram8_enabled) {
++                /* Expansion memory enabled: 0x8000-0x9fff is RAM, ROM starts at 0xa000 */
++                drivemem_set_func(cpud, 0x80, 0xa0, drive_read_ram, drive_store_ram, drive_peek_ram, &drv->drive_ram[0x8000], 0);
++                /* ROM at 0xa000-0xbfff (offset 0x2000 in trap_rom) */
++                drivemem_set_func(cpud, 0xa0, 0xc0, drive_read_rom, NULL, drive_peek_rom, &drv->trap_rom[0x2000], 0);
++            } else {
++                /* No expansion memory: ROM starts at 0x8000 */
++                drivemem_set_func(cpud, 0x80, 0xa0, drive_read_rom, NULL, drive_peek_rom, drv->trap_rom, 0);
++                /* ROM at 0xa000-0xbfff (offset 0x2000 in trap_rom) */
++                drivemem_set_func(cpud, 0xa0, 0xc0, drive_read_rom, NULL, drive_peek_rom, &drv->trap_rom[0x2000], 0);
++            }
++            /* ROM at 0xc000-0xffff (offset 0x4000 in trap_rom) */
++            drivemem_set_func(cpud, 0xc0, 0x100, drive_read_rom, NULL, drive_peek_rom, &drv->trap_rom[0x4000], 0xc000fffd);
++        } else {
++            /* Fallback: assume 16K ROM if size is unknown */
++            if (drv->drive_ram8_enabled) {
++                drivemem_set_func(cpud, 0x80, 0xa0, drive_read_ram, drive_store_ram, drive_peek_ram, &drv->drive_ram[0x8000], 0);
++                drivemem_set_func(cpud, 0xa0, 0xc0, drive_read_free, drive_store_free, drive_peek_free, NULL, 0);
++            } else {
++                drivemem_set_func(cpud, 0x80, 0xc0, drive_read_free, drive_store_free, drive_peek_free, NULL, 0);
++            }
++            drivemem_set_func(cpud, 0xc0, 0x100, drive_read_rom, NULL, drive_peek_rom, &drv->trap_rom[0x4000], 0xc000fffd);
++        }
+         break;
+     default:
+         break;
+diff --git a/vice/src/drive/tcbm/tcbm-resources.c b/vice/src/drive/tcbm/tcbm-resources.c
+index ba1cebb625..57cc63f2d3 100644
+--- a/vice/src/drive/tcbm/tcbm-resources.c
++++ b/vice/src/drive/tcbm/tcbm-resources.c
+@@ -54,7 +54,11 @@ static const resource_string_t resources_string[] = {
+ 
+ int tcbm_resources_init(void)
+ {
+-    return resources_register_string(resources_string);
++    if (resources_register_string(resources_string) < 0) {
++        return -1;
++    }
++
++    return 0;
+ }
+ 
+ void tcbm_resources_shutdown(void)
+diff --git a/vice/src/drive/tcbm/tcbmrom.c b/vice/src/drive/tcbm/tcbmrom.c
+index f1b52245ce..e8932b68ce 100644
+--- a/vice/src/drive/tcbm/tcbmrom.c
++++ b/vice/src/drive/tcbm/tcbmrom.c
+@@ -44,12 +44,21 @@ static log_t tcbmrom_log;
+ /* If nonzero, the ROM image is available  */
+ static unsigned int rom1551_loaded = 0;
+ 
++/* Size of loaded ROM (0x4000 for 16K, 0x8000 for 32K) */
++static unsigned int rom1551_size = 0;
++
+ /* test ROM for existence, size */
+ int tcbmrom_load_1551(void)
+ {
+-    return driverom_test_load("DosName1551", &rom1551_loaded,
+-            DRIVE_ROM1551_SIZE, DRIVE_ROM1551_SIZE, "1551",
+-            DRIVE_TYPE_1551, NULL);
++    unsigned int size = 0;
++    /* Support both 16K (0x4000) and 32K (0x8000) ROM images */
++    int result = driverom_test_load("DosName1551", &rom1551_loaded,
++            DRIVE_ROM1551_SIZE, DRIVE_ROM_SIZE, "1551",
++            DRIVE_TYPE_1551, &size);
++    if (result == 0 && size > 0) {
++        rom1551_size = size;
++    }
++    return result;
+ }
+ 
+ /* setup (=load) the ROM for a given disk unit */
+@@ -63,11 +72,17 @@ void tcbmrom_setup_image(diskunit_context_t *unit)
+ 
+             switch (unit->type) {
+                 case DRIVE_TYPE_1551:
+-                    driverom_load("DosName1551", unit->rom, &loaded,
+-                            DRIVE_ROM1551_SIZE, DRIVE_ROM1551_SIZE, "1551",
+-                            DRIVE_TYPE_1551, NULL);
+-                    /* ROM was loaded to the lower part of the buffer */
+-                    memcpy(&(unit->rom[DRIVE_ROM1551_SIZE]), unit->rom, DRIVE_ROM1551_SIZE);
++                    {
++                        unsigned int rom_size = 0;
++                        driverom_load("DosName1551", unit->rom, &loaded,
++                                DRIVE_ROM1551_SIZE, DRIVE_ROM_SIZE, "1551",
++                                DRIVE_TYPE_1551, &rom_size);
++                        if (loaded) {
++                            rom1551_size = rom_size;
++                            /* For 16K ROM: no duplication, ROM is only at 0xc000-0xffff */
++                            /* For 32K ROM: ROM is at 0x8000-0xffff (or 0xa000-0xffff if RAM expansion enabled) */
++                        }
++                    }
+                     break;
+             }
+             /* if loading failed, set rom type to 0 */
+@@ -105,3 +120,8 @@ void tcbmrom_init(void)
+ {
+     tcbmrom_log = log_open("TCBMDriveROM");
+ }
++
++unsigned int tcbmrom_get_1551_size(void)
++{
++    return rom1551_size;
++}
+diff --git a/vice/src/drive/tcbm/tcbmrom.h b/vice/src/drive/tcbm/tcbmrom.h
+index 2dc96561af..cbf7944505 100644
+--- a/vice/src/drive/tcbm/tcbmrom.h
++++ b/vice/src/drive/tcbm/tcbmrom.h
+@@ -36,5 +36,6 @@ void tcbmrom_setup_image(struct diskunit_context_s *unit);
+ int tcbmrom_check_loaded(unsigned int type);
+ 
+ int tcbmrom_load_1551(void);
++unsigned int tcbmrom_get_1551_size(void);
+ 
+ #endif
