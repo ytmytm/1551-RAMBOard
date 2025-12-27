@@ -1,0 +1,371 @@
+(Note: this is an automatic comparison based on 1551 disassembly and All About Your 1541
+       trust but verify!)
+
+COMMODORE 1541 TO 1551 ROM MAPPING GUIDE
+========================================
+
+This document provides a comprehensive mapping between the Commodore 1541 and 1551 ROMs
+to facilitate porting low-level patches (like RAMBoard/RAMEXP patches).
+
+1. ZERO PAGE MAPPING
+--------------------
+The 1551 zero page is significantly shifted compared to the 1541.
+
+| Description                     | 1541 Addr | 1551 Symbol | 1551 Addr |
+|---------------------------------|-----------|-------------|-----------|
+| Active Track Pointer            | $32       | zp20        | $20       |
+| Active Sector Pointer           | $33       | zp21        | $21       |
+| Buffer Pointer (Current)        | $30-$31   | zp27-$28    | $27-$28   |
+| Header ID 1 & 2                 | $16-$17   | zp18-$19    | $18-$19   |
+| Header Track                    | $18       | zp1A        | $1A       |
+| Header Sector                   | $19       | zp1B        | $1B       |
+| Header Checksum                 | $1A       | zp1C        | $1C       |
+| Data Block ID (default $07)     | $47       | zp41        | $41       |
+| Data Parity (Checksum)          | $3A       | zp30        | $30       |
+| Current Drive Number (always 0) | $7F       | zp78        | $78       |
+| GCR conversion offset           | $34       | zp2D        | $2D       |
+| GCR conversion pointer          | $2E-$2F   | zp1E-$1F    | $1E-$1F   |
+| GCR byte counter                | $36       | zp2E        | $2E       |
+| GCR buffer pointer              | $4E-$4F   | zp36-$37    | $36-$37   |
+
+Note: 1551 has "free" ZP space at $F0-$FF and around $60-$6F (though check disassembly).
+
+2. HARDWARE I/O MAPPING
+-----------------------
+The 1551 replaces VIAs with a TIA chip ($4000) and CPU Port ($00/$01).
+
+| Feature           | 1541 (VIA)      | 1551 (TIA/Port) | Logic Difference         |
+|-------------------|-----------------|-----------------|--------------------------|
+| Data Input        | $1C01           | $4001           | TIA read register        |
+| SYNC Found        | $1C00 bit 7     | $4002 bit 6     | 1551: 0 = SYNC found     |
+| Byte Ready        | $1800 (CA1)     | $01 bit 7       | 1551: 1 = Byte Ready     |
+| Motor / LED       | $1C00 bits 2/3  | $01 bits 2/3    | Same bit positions       |
+| Stepper Motor     | $1C00 bits 0/1  | $01 bits 0/1    | Same bit positions       |
+| R/W Mode          | $1C00 bit 5     | $4002 bit 4     | 0=Write, 1=Read          |
+
+3. ROM FUNCTION MAPPING
+-----------------------
+Addresses refer to stock 1541-II ($C000-$FFFF) and 1551 ($C000-$FFFF).
+
+| 1541 Routine       | 1541 Addr | 1551 Addr | 1551 Symbol | Notes                                |
+|--------------------|-----------|-----------|-------------|--------------------------------------|
+| Read Sector        | $F4D1     | $F403     | B_F403      | Main sector read entry point         |
+| Wait for Data Block| $F50A     | $F513     | S_F513      | Wait for header sync + sync          |
+| Wait for Header    | $F510     | $F519     | S_F519      | Look for specific track/sector header|
+| Wait for SYNC      | $F556     | $F560     | L_F560      | Simple wait for SYNC mark            |
+| Encode Header      | $F934     | $F3BB     | S_F3BB      | Result goes to $0111 on 1551         |
+| Calculate Parity   | $F5E9     | $F60A     | S_F60A      | Result in A and zp30                 |
+| Error Termination  | $F969     | $FA12     | L_FA12      | Exit to main loop with error in A    |
+| Initialize Drive   | $D005     | $C4B7     | S_C4B7      | Disk initialization routine          |
+| 5 GCR to 4 BIN     | $F7E6     | $F928     | S_F928      | Fast GCR decoding routine            |
+| ROM Checksum Check | $EAE4     | $E9F0     | B_E9F0      | Site to disable ROM checksum         |
+
+4. CODE STRUCTURE COMPARISON (SECTOR READ)
+------------------------------------------
+
+1541 (Standard Sector Read loop):
+---------------------------------
+F4D1: 20 0A F5    JSR $F50A  ; Wait for data block
+F4D4: AD 01 1C    LDA $1C01  ; Read data...
+
+1551 (Standard Sector Read loop):
+---------------------------------
+F403: 20 13 F5    JSR $F513  ; Wait for block (S_F513)
+F406: 24 01       BIT $01    ; Wait for byte ready (zp01 bit 7)
+F408: 10 FC       BPL $F406
+F40A: AD 01 40    LDA $4001  ; Read from TIA data register
+
+5. PATCH ADVICE FOR 1551
+------------------------
+- Hooking Read Sector: Use $F403 instead of $F4D1.
+- GCR Decoding: 1551 uses "on-the-fly" decoding in the ROM ($F406 onwards), unlike 1541 which reads the whole GCR block and decodes later ($F4ED).
+- Checksum Disable: Disable at $E9F2 by NOPing the branch or forcing the comparison to pass.
+- Free RAM: $0300-$06FF (4 buffers) is the same. BAM is resident at $0700-$07FF.
+
+6. PROPOSED RAMPATCH-1551.ASM HEADER
+------------------------------------
+This is how the configuration section of `rampatch-1541.asm` translates to 1551.
+
+```6502
+// 1551 ROM patch configuration
+// RAM expansion base address (e.g. $8000-$9FFF)
+.const RAMEXP = $8000 
+
+// Zero Page mapping (1551 equivalents)
+.const HEADER = $18   // block header id 1 ($18-$1C: ID1, ID2, T, S, CHK)
+.const HDRPNT = $20   // active track/sector pointer ($20/$21)
+.const STAB   = $24   // scratch pad for GCR conversion ($24-$2B)
+.const BUFPNT = $27   // current buffer pointer ($27/$28)
+.const DBID   = $41   // data block ID char ($07)
+.const CHKSUM = $30   // parity for data buffer (result of S_F60A)
+
+// 1551 ROM locations
+.const LC4B7 = $C4B7 // initialize drive if needed
+.const LC722 = $C722 // initialize drive (raw entry)
+.const LF560 = $F560 // wait for sync
+.const LF928 = $F928 // convert 5 GCR bytes to 4 BIN
+.const LF513 = $F513 // wait for encoded header & sync
+.const LF406 = $F406 // instruction after patch at $F403
+.const LF60A = $F60A // calculate parity of data block ($27 pointer)
+
+// Patch variables (using verified free ZP in 1551)
+.const bufpage     = $f0  // (2)
+.const bufrest     = $f2  // (2) - only if caching raw GCR
+.const hdroffs     = $f4  // (1)
+.const counter     = $f5  // (1)
+.const hdroffsold  = $f6  // (1)
+
+// ROM Patch Sites
+.const PATCH_READ_SECTOR  = $F403  // hook for ReadSector (was $F4D1)
+.const PATCH_DISK_CHANGE   = $C722  // hook for ResetCache (was $C649)
+.const PATCH_ROM_CHECKSUM  = $E9F0  // 6x NOP to disable check (was $EAE4)
+.const PATCH_JOB_IRQ       = $F19F  // hook for InvalidateCacheForJob (was $F2C0)
+.const PATCH_I_COMMAND     = $D121  // hook for InitializeAndResetCache (was $D005)
+
+// Sizes (1551 uses same sector counts as 1541)
+.const hdrsize     = 8
+.const maxsector   = 22
+.const bufrestsize = $48
+```
+
+7. DETAILED CORRESPONDENCE TABLE
+-------------------------------
+
+| Feature / Variable | 1541 Address | 1551 Address | 1551 Disasm Symbol |
+|--------------------|--------------|--------------|-------------------|
+| Disk ID 1          | $12          | $14          | zp14              |
+| Disk ID 2          | $13          | $15          | zp15              |
+| Header ID 1        | $16          | $18          | zp18              |
+| Header ID 2        | $17          | $19          | zp19              |
+| Header Track       | $18          | $1A          | zp1A              |
+| Header Sector      | $19          | $1B          | zp1B              |
+| Header Checksum    | $1A          | $1C          | zp1C              |
+| Drive Status       | $20          | $2B          | zp2B              |
+| Current Track      | $22          | $29          | zp29              |
+| Current Sector     | $4C          | $3D          | zp3D              |
+| Job Buffers        | $00-$05      | $0002-$0007  | $0002-$0007       |
+| Job Parameters     | $06-$11      | $08-$13      | zp08-zp13         |
+| DOS Error Flag     | $0298        | $0298        | V_0298            |
+| TIA Register Port  | $1C01 (VIA)  | $4001 (TIA)  | V_4001            |
+| SYNC Status        | $1C00 bit 7  | $4002 bit 6  | V_4002 (0=found)  |
+| Byte Ready Status  | $1800 (CA1)  | $01 bit 7    | zp01 (1=ready)    |
+| Buffer Pointer     | $9A (table)  | $9A (table)  | zp9A              |
+| Buffer Allocation  | $A8 (table)  | $A8 (table)  | zpA8              |
+| Channel Index      | $022B-$022D  | $022B-$022D  | V_022B            |
+| File Type          | $ED (table)  | $ED (table)  | zpED              |
+| Channel Status     | $F3 (table)  | $F3 (table)  | zpF3              |
+| Blocks Free (lo)   | $02FA        | $02FA        | V_02FA            |
+| Blocks Free (hi)   | $02FC        | $02FC        | V_02FC            |
+| BAM Changed Flag   | $0251        | $0251        | V_0251            |
+| Command Flag       | $0255        | $0255        | V_0255            |
+| End Pointer        | $0244        | $0244        | V_0244            |
+
+8. GCR DECODING ANALYSIS
+------------------------
+
+### 8.1 On-the-fly Decoding
+Unlike the 1541 (1MHz), which must read a whole track of raw GCR data and decode it later, the 1551 (2MHz) performs **on-the-fly GCR decoding** similar to the 1571.
+- The TIA chip ($4001) latches the incoming GCR byte.
+- The 2MHz CPU has enough cycles between bytes to decode the GCR nybbles using lookup tables.
+- **Implication for RAMpatch**: In your `ReadTrack` routine, you should decode GCR into binary data *while reading*. This allows the cache to store ready-to-use binary data, significantly speeding up subsequent sector requests.
+
+### 8.2 GCR Decoding Tables (1551 vs 1571)
+You noticed that 1571 tables take 1KB while 1551 tables seem shorter.
+- **1571 (4 Pages)**: The 1571 ROM ($9F0D-$A3FF) uses four separate 256-byte pages for GCR decoding. However, these pages are highly redundant (e.g., the same 64-byte sequence repeated 4 times per page).
+- **1551 (1 Page)**: The 1551 ROM ($F6FF-$F7FF) uses an **overlapping table** technique. It fits the same decoding logic into a single 256-byte page by using different base addresses (offsets) into the same block of data.
+  - 1571 `LA00D` (Page 0) -> 1551 uses base `$F70C,X`
+  - 1571 `LA10D` (Page 1) -> 1551 uses base `$F70D,X` or `$F70E,X`
+  - 1571 `LA20D` (Page 2) -> 1551 uses base `$F71C,X`
+  - 1571 `LA30D` (Page 3) -> 1551 uses base `$F729,X`
+- **Recommendation**: Do not bundle GCR tables in your 1551 patch. Use the existing tables in the 1551 ROM starting at `$F6FF`.
+
+### 8.3 Comparison of GCR base addresses:
+| 1571 Label | 1571 Addr | 1551 Equivalent Base | 1551 Addr |
+|------------|-----------|----------------------|-----------|
+| L9F0D      | $9F0D     | V_F70C               | $F70C     |
+| L9F1D      | $9F1D     | V_F71C               | $F71C     |
+| LA00D      | $A00D     | V_F70C               | $F70C     |
+| LA10D      | $A10D     | V_F70D / V_F70E      | $F70D/E   |
+| LA20D      | $A20D     | V_F71C               | $F71C     |
+| LA30D      | $A30D     | V_F729               | $F729     |
+| L9F2A      | $9F2A     | V_F729               | $F729     |
+
+9. ADDITIONAL FUNCTION MAPPINGS
+--------------------------------
+Based on detailed analysis of the commented disassembly:
+
+| 1541 Routine              | 1541 Addr | 1551 Addr | 1551 Symbol | Notes                                    |
+|----------------------------|-----------|-----------|-------------|------------------------------------------|
+| Open Channel (Read)       | ~$D1FB    | $D1FB     | S_D1FB      | Opens channel for reading files          |
+| Open Channel (Write)       | ~$D217    | $D217     | S_D217      | Opens channel for writing files          |
+| Get File Type             | ~$D235    | $D235     | S_D235      | Returns file type, Z flag if REL         |
+| Get Byte from Buffer      | ~$D247    | $D247     | S_D247      | Reads next byte from channel buffer      |
+| Read Track/Sector Link     | ~$D1AB    | $D1AB     | S_D1AB      | Reads track/sector from linked file      |
+| Read/Write Block          | ~$D1D3    | $D1D3     | S_D1D3      | Common entry for block operations        |
+| Main Wait Loop             | ~$EAxx    | $EABD     | L_EABD      | Idle loop waiting for commands           |
+| Periodic Maintenance      | ~$EAxx    | $EADC     | S_EADC      | Called every 256 idle loops              |
+| Clear Error Flag          | ~$F3xx    | $F3F0     | S_F3F0      | Clears V_026C error flag                 |
+| Set LED Flag              | ~$F3xx    | $F3F7     | L_F3F7      | Sets LED flash mode ($E0)                |
+| Header Timeout            | ~$F554    | $F554     | B_F554      | Header search timeout (error $02)       |
+| Sync Timeout              | ~$F556    | $F55B     | L_F55B      | Sync wait timeout (error $03)           |
+| TCBM Bus Handler          | N/A       | $C022     | S_C022      | 1551-specific TCBM interrupt handler    |
+| TCBM TALK/LISTEN          | N/A       | $C071     | B_C071      | Handle TALK/LISTEN commands              |
+| TCBM Data Receive         | N/A       | $C0F6     | B_C0F6      | Handle incoming data                     |
+| TCBM Data Send            | N/A       | $C14E     | B_C14E      | Handle outgoing data                     |
+
+10. TCBM PROTOCOL DETAILS (1551-SPECIFIC)
+------------------------------------------
+The 1551 uses TCBM (TED Computer Bus Manager) instead of IEEE-488 serial bus.
+
+TCBM Hardware Registers:
+- $4000: TIA Port A (data port, bidirectional)
+- $4001: TIA Data Latch (GCR bytes from disk)
+- $4002: TIA Status/Control Register
+  * Bit 6: SYNC found (0 = found, inverted logic vs 1541)
+  * Bit 3: ACK handshake bit
+  * Bits 6-7: Stepper motor control
+- $4003: TIA Data Direction Register (0=input, $FF=output)
+- $01: CPU Port (bit 7 = Byte Ready, bits 0-1 = stepper, bit 2 = motor, bit 3 = LED)
+
+TCBM Command Codes:
+- $40: TALK command
+- $20: LISTEN command  
+- $5F: UNTALK command
+- $3F: UNLISTEN command
+- $60: DATA (not a device command)
+
+TCBM Handshake:
+- DAV (Data Valid): Bit 7 of $4002 (negative logic: 0 = data valid)
+- ACK: Bit 3 of $4002 (set/clear for handshake)
+- Double-read technique: Read $4000 twice to ensure port stability
+
+11. IRQ AND JOB QUEUE DIFFERENCES
+----------------------------------
+1541 IRQ ($F2C0):
+- Triggered by IEEE-488 ATN line
+- Processes job queue at $00-$05
+- Checks for ATN commands from computer
+
+1551 IRQ ($F195):
+- Triggered by 555 timer (astable multivibrator)
+- Frequency: According to disassembly, IRQ occurs every 16650 cycles
+  * At 2MHz: 16650 cycles / 2000000 cycles/s = 8.325ms between IRQs
+  * This theoretically gives ~120Hz (1/0.008325), BUT:
+  * - There is no direct technical documentation confirming this frequency
+  * - Some sources suggest ~100Hz (every 10ms)
+  * - 555 timer may have tolerance, so actual frequency may vary
+  * - Should be verified by measurement or technical documentation
+- Processes job queue at $0002-$0007 (shifted by 2 bytes)
+- Handles LED flashing, stepper motor control, job processing
+- No IEEE-488 equivalent (uses TCBM polling instead)
+
+Job Buffer Structure:
+- 1541: $00-$05 (6 job buffers)
+- 1551: $0002-$0007 (6 job buffers, shifted)
+- Job codes: $80 = read, $90 = write, $01 = empty
+
+12. BUFFER AND CHANNEL MANAGEMENT
+----------------------------------
+Buffer Allocation Tables:
+- 1541: $A8 (buffer allocation), $AF (alternate pointer), $9A (buffer pointers)
+- 1551: $A8 (buffer allocation), $AF (alternate pointer), $9A (buffer pointers)
+- Same structure, but addresses may differ slightly
+
+Channel Management:
+- 1541: $022B-$022D (logical index for channels 0-2)
+- 1551: $022B-$022D (logical index for channels 0-14)
+- Channel status: $FF = not open, bit 7 = allocated, bits 0-3 = buffer number
+
+File Type Table:
+- 1541: $ED (file type per channel)
+- 1551: $ED (file type per channel)
+- Types: $00=DEL, $01=SEQ, $02=PRG, $03=USR, $04=REL
+
+13. GCR DECODING ALGORITHM DETAILS
+-----------------------------------
+The 1551 on-the-fly decoding process ($F403):
+
+1. Wait for header sync and verify header block (S_F513)
+2. Wait for sector data sync mark (L_F560)
+3. Read and decode 256 bytes + 4 bytes overhead:
+   - Loop: Read 5 GCR bytes → decode to 4 binary bytes
+   - Uses overlapping tables: V_F70C, V_F70D, V_F70E, V_F71C, V_F729, V_F6FF
+   - Temporary variables: zpFA-zpFD ($FA-$FD) for GCR byte processing
+4. Verify checksum:
+   - First decoded byte must be $07 (data block marker)
+   - Calculate XOR checksum of 256 bytes (S_F60A)
+   - Compare with decoded checksum byte
+
+GCR Decoding Process (5 bytes → 4 bytes):
+- Byte 1: Bits from GCR bytes #1 and #2 (uses V_F70C)
+- Byte 2: Bits from GCR bytes #2 and #3 (uses V_F70C + offsets)
+- Byte 3: Bits from GCR bytes #3 and #4 (uses V_F71C, V_F70C+1)
+- Byte 4: Bits from GCR bytes #4 and #5 (uses V_F729, V_F6FF)
+
+14. HEADER ENCODING DETAILS
+----------------------------
+Header Structure (5 bytes → 8 GCR bytes):
+- Byte 0: $08 (header marker)
+- Byte 1: zp1C (header checksum)
+- Byte 2: zp1B (sector number)
+- Byte 3: zp1A (track number)
+- Byte 4: zp19 (disk ID byte 2)
+- Byte 5: zp18 (disk ID byte 1)
+- Bytes 6-7: $00 (padding)
+
+Encoding Process (S_F3BB):
+- First 4 bytes → 5 GCR bytes (stored at $0111-$0115)
+- Last 4 bytes → 5 GCR bytes (stored at $0116-$011A)
+- Uses S_F80C (encode 4 binary → 5 GCR)
+- Result: 8 GCR bytes total at $0111-$011A (vs $0024-$002B on 1541)
+
+15. ERROR CODES AND STATUS
+---------------------------
+Error Codes (returned in accumulator):
+- $01: Success
+- $02: Header not found (timeout after $5A retries)
+- $03: Sync not found (timeout)
+- $04: Wrong block marker (not $07)
+- $05: Checksum mismatch
+
+Error Handling:
+- Error code stored in job buffer ($0002,Y on 1551, $00,Y on 1541)
+- Error flag: V_026C (same address on both)
+- LED flashing: Set zp76 to $E0 for error indication
+- Flash rate: ~250ms (30 IRQ cycles at ~120Hz)
+
+16. ADDITIONAL ZERO PAGE VARIABLES
+-----------------------------------
+Temporary Variables (GCR processing):
+- zpFA ($FA): First GCR byte / temp storage
+- zpFB ($FB): Second GCR byte / temp storage
+- zpFC ($FC): Third GCR byte / temp storage
+- zpFD ($FD): Fourth GCR byte / temp storage
+- zpF9 ($F9): Decoded nybble storage
+
+IRQ and Status Variables:
+- zp3A ($3A): Saved stack pointer (1541: $49)
+- zp3C ($3C): Retry counter (used instead of X register)
+- zp3F ($3F): GCR/BIN indicator (1541: $50)
+- zp76 ($76): LED flag ($E0 = flash mode)
+- zp55 ($55): LED flash counter
+- zp96 ($96): LED timeout counter
+- zp97 ($97): TIA status/ACK bits
+
+TCBM Communication:
+- zp58 ($58): Pending data flag (bit 7 set = data pending)
+- zp59 ($59): Last data byte (saved for delayed processing)
+- zp5B ($5B): TALK flag
+- zp5C ($5C): LISTEN flag
+- zp7C ($7C): Secondary address
+- zp7D ($7D): Secondary address backup
+- zp7E ($7E): Data byte storage
+- zp8F ($8F): Command byte storage
+- zp95 ($95): EOI flag
+
+Stepper Motor Control:
+- zp29 ($29): Current track (FDC track register)
+- zp3B ($3B): Stepper motor direction (<$80 = inner, >=$80 = outer)
+- zp38 ($38): TIA control register bits (for stepper)
+- zp2B ($2B): Drive status flag (bit 5=motor, bit 6=stepper, bit 7=ready)
+
