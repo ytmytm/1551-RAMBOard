@@ -3,6 +3,14 @@ These are my notes, a project diary. I highly recommend this practice!
 (continuing from 1571-TrackCacheROM)
 (continuing from 1541-RAMBOard-FirstBank)
 
+[2025-12-27]
+It's done! Testing was done on VICE patched to support 32K ROMs and 8K RAM expansion at $8000-$9FFF.
+It was a surprise for me to discover that 1551 indeed decodes GCR on the fly and uses more efficient GCR decoding
+tables, much shorter than 1571. Therefore track caching code reuses the ROM implementation instead of bringing over the
+one from 1571. In the same way the headers are decoded using (already) fast ROM routine and some of the 1541 patches could be
+dropped.
+Overall the speedup seems to be about 33%, with the main benefit that the sector interleave doesn't matter anymore.
+
 [2025-12-20]
 Let's try to do the same for 1551!
 
