@@ -1,5 +1,5 @@
 
-(rules PCB 1551-RAMBoard2-FirstBank
+(rules PCB 1551-RAMBoard2-FirstBank.dsn
   (snap_angle 
     fortyfive_degree
   )
@@ -11,18 +11,18 @@
     (via_costs 1)
     (plane_via_costs 5)
     (start_ripup_costs 100)
-    (start_pass_no 687)
+    (start_pass_no 1)
     (layer_rule F.Cu
       (active on)
       (preferred_direction horizontal)
       (preferred_direction_trace_costs 1.0)
-      (against_preferred_direction_trace_costs 2.4)
+      (against_preferred_direction_trace_costs 3.9)
     )
     (layer_rule B.Cu
       (active on)
       (preferred_direction vertical)
       (preferred_direction_trace_costs 1.0)
-      (against_preferred_direction_trace_costs 1.7)
+      (against_preferred_direction_trace_costs 3.2)
     )
   )
   (rule
