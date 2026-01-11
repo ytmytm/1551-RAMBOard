@@ -2,7 +2,7 @@
 
 This project adds **8K of RAM** and **8K of extra ROM space** to a **Commodore 1551** disk drive by replacing the ROM with a small daughterboard. The extra memory is used by a ROM patch to implement a simple **track cache**: read an entire track once, then serve subsequent sector reads from RAM.
 
-![1551-RAMBOard][ PCB](media/01.pcb.png)
+<img src="media/01.pcb.png" width=640 alt="1551-RAMBOard PCB">
 
 ## What you get
 
