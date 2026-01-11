@@ -3,22 +3,24 @@ These are my notes, a project diary. I highly recommend this practice!
 (continuing from 1571-TrackCacheROM)
 (continuing from 1541-RAMBOard-FirstBank)
 
-[2026-01-08]
-Reimplemented fastloader from HypaLoad v4.7.
 (TODO #1)
 There are several improvements to be made that later might be ported back into Parobek's code
 for unexpanded 1551:
-- complete handshake (+4 must indicate that data was read), would allow to load with screen on and possibly avoid problem with VICE
-- transfer load address anyway (+4 must handle that)
+- transfer load address anyway (+4 must handle that, wedge fastloader was size constrained)
 - HypaLoad uses fixed buffer at $0600 for sector data, we might speed up things a bit if instead of copying data we would point BUFPNT into cache
 (TODO #2)
 In general we also need a 64k image generated - patched bottom 32K, 16K of $ff and 16K of original DOS
-(TODO #3)
-Patch Pi1551 to handle 8K/24K RAM/ROM split.
 (TODO #4)
-Patch Parobek to detect signature 'RAM' and jump to M-E,$A000 instead of sending the drivecode, but this can't be tested on VICE
-(doesn't work - maybe TODO#1 would help) and can't be tested on YaPe (no RAM expansion support yet).
-It could be tested on Pi1551 though.
+Patch Parobek to detect signature 'RAM' and jump to M-E,$A003 instead of sending the drivecode
+then use HypaRAM reference code as loader (close to tcbm2sd fastloader protocol)
+
+[2026-01-11]
+Updated fastloader from HypaLoad v4.7 to use complete handshake, now it works in VICE.
+Included "HypaRAM" fastloader, a reference code for future Parobek patch.
+Pi1551 was patched to handle 8K/24K RAM/ROM split and succesfully tested with TrackCache (+33%) and HypaRAM (25x(!))
+
+[2026-01-08]
+Reimplemented fastloader from HypaLoad v4.7.
 
 [2025-12-27]
 It's done! Testing was done on VICE patched to support 32K ROMs and 8K RAM expansion at $8000-$9FFF.

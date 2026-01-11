@@ -177,7 +177,9 @@ ReadSector:
 		sta TRACK				// fastloaders might need it here (what F519 does)
 		cmp RE_cached_track
 		beq ReadCache			// yes - read from cache
-		jmp ReadTrack			// no - read the track
+		jsr ReadTrack			// no - read the track
+		jmp ReadSector
+
 
 ReadCache:
 		iny						// yes, track is cached, just put data back and jump into ROM
@@ -479,7 +481,7 @@ DecodeLoop:
 		sta BUFPNT
 		pla
 		sta BUFPNT+1
-		jmp ReadSector
+		rts
 
 /////////////////////////////////////
 
@@ -494,7 +496,6 @@ DecodeLoop:
 
 // HypaLoad
 // - doesn't transfer load address - skips over the first two bytes; possibly to reduce the wedge size on the host side
-// - doesn't do handshake, only indicates to host when new data is ready
 
 // self-mod code
 .const L04D8 = $0204	// how many bytes to skip from sector buffer (4 in the first one, 2 in all others)
@@ -578,14 +579,14 @@ L04D9:
         iny
 		cpy L04FE			// last byte needed?
         bne L04D9
-        jmp L0512			// yes, exit
+        jmp L0512			// yes, exit XXX shouldn't wait for DAV=0 here and reset to the default state? like below for even bytes?
 
 L0504:
-!:		bit $01				// wait for final ack from even byte (actually not, bit $01/bpl is related to head data, not ack)
-		bpl !-
-        lda #$F				// reset to default state (not executed when loop exits on odd byte)
+!:		lda $4002			// wait for final ack from even byte
+		bpl !-				// wait for DAV=1 here
+        lda #$FF			// reset to default state (not executed when loop exits on odd byte)
         sta $4000
-        lda #$1C			// required after even byte, already like that after odd byte
+        lda #$1C			// required after even byte, already like that after odd byte (not needed? at all?)
         sta $4002
 		// fall through
 
@@ -615,15 +616,19 @@ L053A:  lda $4000			// some kind of long ack?
         pla					// pop 0 (pushed in $0523) - no error?
         beq L0574			// no error
         jmp LE781			// print error into message buffer, go back to the mainloop
-// exit from fastloader with no error
+// exit from fastloader with no error // XXX would be faster to go back to mainloop?
 L0574:  jmp     ($FFFC)		// system reset vector
 
 /// support procedures needed to move the head (SpeedDOS does this with a command byte)
 
 // move head from current track ($29 decoded from a header) to desired ($0202)
 // XXX could be faster if exits immediately when $29 == $0202?
-L03E4:  ldx #$00
-        lda $0202
+L03E4:  lda $0202
+		cmp $29
+		bne !+
+		rts
+!:		ldx #$00
+;        lda $0202
         sec
         sbc $29
         beq L0422
@@ -645,7 +650,7 @@ L03FB:  lda L03FC
         ldy #$04
 L040C:  ldx #$00
 L040E:  lda $4000
-        lda $4000
+        lda $4000			// why reading twice? XXX
         dex
         bne L040E
         dey
