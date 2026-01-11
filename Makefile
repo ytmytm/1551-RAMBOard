@@ -84,7 +84,11 @@ vice-setup: $(VICE_BINARY)
 # Run xplus4 emulator
 xplus4: vice-setup
 	@echo "Starting VICE xplus4 emulator..."
-	@XA_PATH="$$(cd $(VICE_XA_BIN) && pwd)" && \
+	@if [ -f /usr/local/bin/xa ]; then \
+		XA_PATH="/usr/local/bin"; \
+	else \
+		XA_PATH="$$(cd $(VICE_XA_BIN) && pwd)"; \
+	fi && \
 	export PATH="$$XA_PATH:$$PATH" && \
 	export DISPLAY=$${DISPLAY:-localhost:0.0} && \
 	$(VICE_BINARY)
@@ -96,7 +100,11 @@ xplus4-disk: vice-setup
 		exit 1; \
 	fi
 	@echo "Starting VICE xplus4 with disk: $(DISK)"
-	@XA_PATH="$$(cd $(VICE_XA_BIN) && pwd)" && \
+	@if [ -f /usr/local/bin/xa ]; then \
+		XA_PATH="/usr/local/bin"; \
+	else \
+		XA_PATH="$$(cd $(VICE_XA_BIN) && pwd)"; \
+	fi && \
 	export PATH="$$XA_PATH:$$PATH" && \
 	export DISPLAY=$${DISPLAY:-localhost:0.0} && \
 	$(VICE_BINARY) "$(DISK)"
@@ -116,7 +124,11 @@ $(PATCHED_ROM): $(ASM_FILE) $(KICKASS_JAR) $(ROM_FILE)
 test: $(PATCHED_ROM) vice-setup
 	@echo "Starting VICE xplus4 with patched 32K ROM and RAM expansion..."
 	@ROM_PATH="$$(pwd)/$(PATCHED_ROM)" && \
-	XA_PATH="$$(cd $(VICE_XA_BIN) && pwd)" && \
+	if [ -f /usr/local/bin/xa ]; then \
+		XA_PATH="/usr/local/bin"; \
+	else \
+		XA_PATH="$$(cd $(VICE_XA_BIN) && pwd)"; \
+	fi && \
 	export PATH="$$XA_PATH:$$PATH" && \
 	export DISPLAY=$${DISPLAY:-localhost:0.0} && \
 	$(VICE_BINARY) -dos1551 "$$ROM_PATH" -drive8ram8000
