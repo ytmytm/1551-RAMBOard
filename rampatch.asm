@@ -550,7 +550,7 @@ L0318:  jsr L03E4			// move the head to track from $0202, setup density zone
 // sector was read, now transfer it via TCBM - there is no ack from +4 side, but it can halt transfer if $01 bit 7 would be 0?
 // (or was that bit/bpl + bit/bmi real two-way handshake later patched for faster transfer?)
 L04C2:  lda $01
-        eor #$08
+        eor #$08			// blink LED
         sta $01
         lda $0600			// next track==0?
         bne L04D7
@@ -560,20 +560,20 @@ L04C2:  lda $01
 L04D7:  ldy L04D8			// how many bytes skip? (4 or 2)
 
 L04D9:
-!:		bit $01
-		bpl !-
+!:		lda $4002			// wait for DAV=0
+		bmi !-
         lda $0600,y
         sta $4000
-        lda #$14
+        lda #$14			// ACK=0
         sta $4002
         iny
 		cpy L04FE			// last byte needed?
         beq L0504			// yes, but issue final ack
-!:		bit $01
-		bpl !-
+!:		lda $4002
+		bpl !-				// wait for DAV=1
         lda $0600,y
         sta $4000
-        lda #$1C
+        lda #$1C			// ACK=1
         sta $4002
         iny
 		cpy L04FE			// last byte needed?
