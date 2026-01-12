@@ -13,7 +13,8 @@ then use HypaRAM reference code as loader (close to tcbm2sd fastloader protocol)
 
 [2026-01-12]
 Even faster fastloader by zero-copying on the drive side, just point to the cached sector and transfer from there.
-Can't calculate checksum on the fly - it fails in speed zone 1 (track 1-17).
+Can't calculate sector checksum on the fly - it fails in speed zone 1 (track 1-17).
+Fixed a bug (present in original HypaLoad!) that loading '$' used wrong ROM routine address as a fallback.
 
 [2026-01-11]
 Updated fastloader from HypaLoad v4.7 to use complete handshake, now it works in VICE.

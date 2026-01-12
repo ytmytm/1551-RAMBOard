@@ -7,10 +7,13 @@ HYPA0600:
         rts
 
 ROM_LOAD:
-        jmp     LF40C
+        lda     $93
+        ldy     $D0
+        jmp     LF04A
 
 HYPALOAD_060E:
         sta     $93
+        sty     $D0
         lda     RAM_FA
         cmp     #$04
         bcc     ROM_LOAD

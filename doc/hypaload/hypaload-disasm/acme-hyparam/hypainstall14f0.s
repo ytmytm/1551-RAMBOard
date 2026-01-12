@@ -23,7 +23,7 @@ LF397           = $F397
 LEF3B           = $EF3B
 LF06B           = $F06B
 LF211           = $F211
-LF40C           = $F40C
+LF04A           = $F04A
 
 TCBM_DEV8       = $FEF0
 TCBM_DEV8_1     = $FEF1
