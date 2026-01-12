@@ -541,29 +541,42 @@ L0318:  jsr L03E4			// move the head to track from $0202, setup density zone
 		cmp RE_cached_track
 		beq !+				// we already have it
 		jsr ReadTrack		// put new track into cache
-!:		lda #<$0600			// XXX we could avoid the copying thing and use (BUFPNT) pointing into track cache area
+!:		lda #0				// copy data directly from BUFPNT, instead of DoReadCache
 		sta BUFPNT
-		lda #>$0600
+		lda #>RAMEXP			// pages - first 256 bytes
 		sta BUFPNT+1
-		lda $0203			// SECTOR has been overwritten
-		jsr DoReadCache		// copy from cache to (BUFPNT)
+		// find sector
+		ldx #0
+!loop:	lda RE_cached_headers,x	// cached sectors in fact
+		cmp $0203				// SECTOR has been overwritten
+		beq !found+
+		// no, next one
+		inc BUFPNT+1
+		inx
+		cpx RE_max_sector
+		bne !loop-
+		// not found but ignore that
+!found:
 
 // sector was read, now transfer it via TCBM - there is no ack from +4 side, but it can halt transfer if $01 bit 7 would be 0?
 // (or was that bit/bpl + bit/bmi real two-way handshake later patched for faster transfer?)
 L04C2:  lda $01
         eor #$08			// blink LED
         sta $01
-        lda $0600			// next track==0?
+		ldy #0
+        lda (BUFPNT),y		// next track==0?
         bne L04D7
-        ldy $0601			// yes, this is last sector - get # of last byte in buffer to read
-        iny
-        sty L04FE			// store it 
+		iny
+        lda (BUFPNT),y		// yes, this is last sector - get # of last byte in buffer to read
+		tax
+		inx
+        stx L04FE			// store it 
 L04D7:  ldy L04D8			// how many bytes skip? (4 or 2)
 
 L04D9:
 !:		lda $4002			// wait for DAV=0
 		bmi !-
-        lda $0600,y
+        lda (BUFPNT),y
         sta $4000
         lda #$14			// ACK=0
         sta $4002
@@ -572,7 +585,7 @@ L04D9:
         beq L0504			// yes, but issue final ack
 !:		lda $4002
 		bpl !-				// wait for DAV=1
-        lda $0600,y
+        lda (BUFPNT),y
         sta $4000
         lda #$1C			// ACK=1
         sta $4002
@@ -591,10 +604,12 @@ L0504:
 		// fall through
 
 // after sector transfer
-L0512:  lda $0600			// next track&sector available?
+L0512:  ldy #0
+		lda (BUFPNT),y		// next track&sector available?
         beq L0523
         sta $0202			// yes, move it $0202/3
-        lda $0601
+        iny
+        lda (BUFPNT),y
         sta $0203
 // reset the offset to data block in $04d8 to 2 (skip over t&s) and go back to the loop to read next sector from $0202/3
 L0552:  lda #$02
@@ -622,13 +637,11 @@ L0574:  jmp     ($FFFC)		// system reset vector
 /// support procedures needed to move the head (SpeedDOS does this with a command byte)
 
 // move head from current track ($29 decoded from a header) to desired ($0202)
-// XXX could be faster if exits immediately when $29 == $0202?
 L03E4:  lda $0202
 		cmp $29
 		bne !+
 		rts
 !:		ldx #$00
-;        lda $0202
         sec
         sbc $29
         beq L0422
