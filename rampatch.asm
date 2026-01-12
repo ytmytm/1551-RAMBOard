@@ -494,11 +494,7 @@ DecodeLoop:
 // on the drive side the stage was already set - decoded header area contains the very first file sector t&s pointer
 // (it was also already loaded(?))
 
-// HypaLoad
-// - doesn't transfer load address - skips over the first two bytes; possibly to reduce the wedge size on the host side
-
 // self-mod code
-.const L04D8 = $0204	// how many bytes to skip from sector buffer (4 in the first one, 2 in all others)
 .const L04FE = $0205	// number of the last byte from sector buffer
 .const L03FC = $0206	// how many tracks to move when moving the head
 .const L057A = $0207	// temp byte needed when moving the head
@@ -509,12 +505,8 @@ DecodeLoop:
 
 FastLoader:
 		// when this is called, the first t&s of the file is already in $1A/$1B (TRACK/SECTOR)
-L055A:  //lda TRACK
-        //sta $05FE
-        //lda SECTOR
-        //sta $05FF
-L054A:  lda #$04			// set initial transferred buffer data offset to 4 to skip over t&s AND loading address
-        sta L04D8
+L055A:
+L054A:
 L0565:  lda TRACK			// preserve t&s in $0202/3 - the first one to read
         sta $0202
         lda SECTOR
@@ -571,7 +563,7 @@ L04C2:  lda $01
 		tax
 		inx
         stx L04FE			// store it 
-L04D7:  ldy L04D8			// how many bytes skip? (4 or 2)
+L04D7:  ldy #2
 
 L04D9:
 !:		lda $4002			// wait for DAV=0
@@ -611,10 +603,8 @@ L0512:  ldy #0
         iny
         lda (BUFPNT),y
         sta $0203
-// reset the offset to data block in $04d8 to 2 (skip over t&s) and go back to the loop to read next sector from $0202/3
-L0552:  lda #$02
-        sta L04D8
-        jmp L0318
+// go back to the loop to read next sector from $0202/3
+L0552:  jmp L0318
 
 // after last sector transfer
 L0523:  lda #$00

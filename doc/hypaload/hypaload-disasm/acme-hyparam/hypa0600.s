@@ -7,13 +7,15 @@ HYPA0600:
         rts
 
 ROM_LOAD:
-        lda     $93
+        lda     VERFCK
         ldy     $D0
         jmp     LF04A
 
 HYPALOAD_060E:
-        sta     $93
+        sta     VERFCK
         sty     $D0
+        tay
+        bne     ROM_LOAD        // verify
         lda     RAM_FA
         cmp     #$04
         bcc     ROM_LOAD
@@ -40,12 +42,14 @@ E0633:  pla                     ; XXX entrypoint
 ;        jsr     L077C
 L077C:  jsr     LEF3B
         jsr     LF211
-        lda     TED_BORDER
+        lda     TED_BORDER      ; remember border color
         sta     $D0
-        lda     #$01
+        lda     TED_FF06        ; remember screen status
+        sta     $D1
+        lda     #$01            ; close channel 1 (LOAD)
         jsr     CLOSE
 ;
-        lda     #$01
+        lda     #$01            ; reopen as command channel
         ldx     #DEV1551
         ldy     #$0F
         jsr     SETLFS
@@ -81,7 +85,7 @@ L067B:  pla                     ; executed after load, before 65e
         pha
         lda     #$00
         sta     ($9D),y
-L068C:  lda     #$1B            ; screen on
+L068C:  lda     $D1            ; screen possibly on
         sta     TED_FF06
         sta     BANK_ROM        ; restore ROM bank
 ;        jmp     L06D3
@@ -94,7 +98,7 @@ L06D3:  cli
 L065E:  lda     $9E             ; executed after load
         adc     #$00
         sta     $9E
-        lda     $9D
+        lda     $9D             ; $2D/2E VARTAB Pointer: start of BASIC variables
         sta     $2D
         lda     $9E
         sta     $2E
@@ -108,14 +112,32 @@ E06B0:  sei                     ; XXX entrypoint, start LOAD
         sta     BANK_RAM        ; enable whole RAM
         lda     #$0B            ; screen off
         sta     TED_FF06
-        ;
-        ldy     #$00            ; XXX ????
-        ldy     $9F
-        ldy     #$1C
-        ldy     $A0
-        ;
         ldy     #$00
         sty     TCBM_DEV8_2     ; DAV=0
         sty     TCBM_DEV8_3     ; port DDR = $00, input only
-        ldx     #$00
+        ; get load address
+-       lda     TCBM_DEV8_2
+        bmi     -
+        lda     TCBM_DEV8_1     ; status EOF?
+        bne     E0697 ; L0445
+        lda     TCBM_DEV8       ; read data
+        sta     $9D
++       lda     #$40
+        sta     TCBM_DEV8_2     ; DAV=1 - acknowledge data
+-       lda     TCBM_DEV8_2
+        bpl     -
+        lda     TCBM_DEV8_1
+        bne     E0697; L0445
+        lda     TCBM_DEV8
+        sta     $9E
+        ldx     #0
+        stx     TCBM_DEV8_2     ; DAV=0 - acknowledge data
+
+        lda     RAM_SA
+        bne     +
+        lda     $B4
+        sta     $9D
+        lda     $B5
+        sta     $9E
++
         rts                     ; Y must be 0 at the end of the routine! (initial data offset)

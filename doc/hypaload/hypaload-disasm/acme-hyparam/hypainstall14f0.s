@@ -1,12 +1,19 @@
 !to "hyparam_1551.prg",cbm
 
-DEV1551 = 8
+DEV1551 = 8     ; need to change TED_DEV8 to match
 
 ;MEMSIZ = $37
 
-RAM_FNLEN       = $AB
-RAM_FA          = $AE
-RAM_FNADR       = $AF
+VERFCK          = $93 ; (1) load(0) or verify(1) flag
+EA              = $9D ; (2)
+RAM_FNLEN       = $AB ; (1) file name length
+RAM_SA          = $AD ; (1) secondary address (0 = load into BASIC address, <>0 load into address from file)
+RAM_FA          = $AE ; (1) device number
+RAM_FNADR       = $AF ; (2) file name address
+RAM_MEMUSS      = $B4 ; (2) Load ram base
+; $D0 = border color TED_BORDER
+; $D1 = screen status TED_FF06
+
 ;DRV_STARTUP     = $0303
 RAM_ISTOP       = $0326
 RAM_ILOAD       = $032E
@@ -60,7 +67,11 @@ HYPAINSTALL:
 -       lda     EHYPA0600,x
         sta     HYPA0600,x
         inx
-        cpx     #(EHYPA0600_END - EHYPA0600)
+        bne     -
+-       lda     EHYPA0600+$0100,x
+        sta     HYPA0600+$0100,x
+        inx
+        cpx     #(EHYPA0600_END - EHYPA0600-$0100)
         bne     -
 
         ldx     #$00
