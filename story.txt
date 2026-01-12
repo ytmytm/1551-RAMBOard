@@ -14,6 +14,7 @@ Even faster fastloader by zero-copying on the drive side, just point to the cach
 Can't calculate sector checksum on the fly - it fails in speed zone 1 (track 1-17).
 Fixed a bug (present in original HypaLoad!) that loading '$' used wrong ROM routine address as a fallback.
 HypaRAM honors load address from the file.
+Seems to work at ~11300 bytes/s = 28x 1541 = 7x 1551, faster than tcbm2sd fastloader.
 
 [2026-01-11]
 Updated fastloader from HypaLoad v4.7 to use complete handshake, now it works in VICE.
