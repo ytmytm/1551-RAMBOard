@@ -120,18 +120,12 @@
 
 		.pc = $A000
 		.text "RAM"				// signature, last byte is the version number: 'M' is version 1
-		// API
-SpeedDOSRun:					// $A003
-		jmp FastLoader			// SpeedDOS loader at a fixed address for C64 Kernal side
+		// API at $A003
+		jmp FastLoader
 		jmp ReadTrack
 		jmp ReadSector
 		jmp ResetOnlyCache
-
-/////////////////////////////////////
-
-FastLoader:
-		// not implemented yet
-		rts
+		jmp DoReadCache
 
 /////////////////////////////////////
 
@@ -183,12 +177,22 @@ ReadSector:
 		sta TRACK				// fastloaders might need it here (what F519 does)
 		cmp RE_cached_track
 		beq ReadCache			// yes - read from cache
-		jmp ReadTrack			// no - read the track
+		jsr ReadTrack			// no - read the track
+		jmp ReadSector
+
 
 ReadCache:
 		iny						// yes, track is cached, just put data back and jump into ROM
 		lda (HDRPNT),y			// needed sector number
 		sta SECTOR				// fastloader might need it here (what F519 does)
+		jsr DoReadCache
+		bcs !+
+		jmp LF50E				// we have data as if it came from the disk, continue in ROM, return 'ok'
+		// not found? fall back on ROM and try to read it again
+!:		jsr LF513				// replaced instruction
+		jmp LF406				// next instruction
+
+DoReadCache:
 		// setup pointers
 		lda #>RAMEXP			// pages - first 256 bytes
 		sta bufpage+1
@@ -204,9 +208,8 @@ ReadCache:
 		inx
 		cpx RE_max_sector
 		bne !loop-
-		// not found? fall back on ROM and try to read it again
-		jsr LF513				// replaced instruction
-		jmp LF406				// next instruction
+		sec						// not found!
+		rts
 
 !found:	// copy data and fall back into ROM		
 		ldy #0
@@ -214,8 +217,8 @@ ReadCache:
 		sta (BUFPNT),y
 		iny
 		bne !-
-
-		jmp LF50E				// we have data as if it came from the disk, continue in ROM, return 'ok'
+		clc						// found data
+		rts
 
 ReadTrack:
 		sta RE_cached_track		// this will be our new track for caching
@@ -478,4 +481,257 @@ DecodeLoop:
 		sta BUFPNT
 		pla
 		sta BUFPNT+1
-		jmp ReadSector
+		rts
+
+/////////////////////////////////////
+
+// fastloader based on HypaLoad 4.7 which is suprisingly similar to SpeedDOS known from 1541
+// on the host side fastloader opens the file via DOS but then intercepts STOP vector so that control
+// returns to fastloader right after SEARCHING... LOADING messages are displayed and (possible) DEVICE NOT PRESENT / FILE NOT FOUND
+// errors already intercepted
+// then the host restores original STOP vector and abandonds the LOAD by closing the channels
+// and calls M-E to run the fastloader code instead
+// on the drive side the stage was already set - decoded header area contains the very first file sector t&s pointer
+// (it was also already loaded(?))
+
+// self-mod code
+.const L04FE = $0205	// number of the last byte from sector buffer
+.const L03FC = $0206	// how many tracks to move when moving the head
+.const L057A = $0207	// temp byte needed when moving the head
+// ROM
+.const LF145 = $F145	// part of drive init with some initial section skipped
+.const LE781 = $E781	// print error into message buffer, go back to the mainloop
+.const LF388 = $F388	// decode 8 bytes of header at $0111 from GCR to HEADER
+
+FastLoader:
+		// when this is called, the first t&s of the file is already in $1A/$1B (TRACK/SECTOR)
+L055A:
+L054A:
+L0565:  lda TRACK			// preserve t&s in $0202/3 - the first one to read
+        sta $0202
+        lda SECTOR
+        sta $0203
+
+L0306:  sei					// t&s of 1st sector is in $0202/3 now
+        tsx
+        stx $3B
+        lda $01
+        ora #$04
+        and #$F7
+        sta $01
+        jsr L0475			// read and decode any header to get current track number (destroys $1A/$1B=TRACK, SECTOR)
+        dec $4003			// sets port to output?
+
+// main loop, go back here after reading and transfering sector (until the last one)
+L0318:  jsr L03E4			// move the head to track from $0202, setup density zone
+        lda	$0202			// copy desired t&s to $1a/1b (header space)
+        sta	TRACK
+        lda	$0203
+        sta SECTOR
+		// head is over track, sector is being found and decoded here... stored in $0600 (disregarding BUFPNT $27/8)
+		lda $0202			// we are over TRACK already
+		cmp RE_cached_track
+		beq !+				// we already have it
+		jsr ReadTrack		// put new track into cache
+!:		lda #0				// copy data directly from BUFPNT, instead of DoReadCache
+		sta BUFPNT
+		lda #>RAMEXP			// pages - first 256 bytes
+		sta BUFPNT+1
+		// find sector
+		ldx #0
+!loop:	lda RE_cached_headers,x	// cached sectors in fact
+		cmp $0203				// SECTOR has been overwritten
+		beq !found+
+		// no, next one
+		inc BUFPNT+1
+		inx
+		cpx RE_max_sector
+		bne !loop-
+		// not found but ignore that
+!found:
+
+// sector was read, now transfer it via TCBM - there is no ack from +4 side, but it can halt transfer if $01 bit 7 would be 0?
+// (or was that bit/bpl + bit/bmi real two-way handshake later patched for faster transfer?)
+L04C2:  lda $01
+        eor #$08			// blink LED
+        sta $01
+		ldy #0
+        lda (BUFPNT),y		// next track==0?
+        bne L04D7
+		iny
+        lda (BUFPNT),y		// yes, this is last sector - get # of last byte in buffer to read
+		tax
+		inx
+        stx L04FE			// store it 
+L04D7:  ldy #2
+
+L04D9:
+!:		lda $4002			// wait for DAV=0
+		bmi !-
+        lda (BUFPNT),y
+        sta $4000
+        lda #$14			// ACK=0
+        sta $4002
+        iny
+		cpy L04FE			// last byte needed?
+        beq L0504			// yes, but issue final ack
+!:		lda $4002
+		bpl !-				// wait for DAV=1
+        lda (BUFPNT),y
+        sta $4000
+        lda #$1C			// ACK=1
+        sta $4002
+        iny
+		cpy L04FE			// last byte needed?
+        bne L04D9
+        jmp L0512			// yes, exit XXX shouldn't wait for DAV=0 here and reset to the default state? like below for even bytes?
+
+L0504:
+!:		lda $4002			// wait for final ack from even byte
+		bpl !-				// wait for DAV=1 here
+        lda #$FF			// reset to default state (not executed when loop exits on odd byte)
+        sta $4000
+        lda #$1C			// required after even byte, already like that after odd byte (not needed? at all?)
+        sta $4002
+		// fall through
+
+// after sector transfer
+L0512:  ldy #0
+		lda (BUFPNT),y		// next track&sector available?
+        beq L0523
+        sta $0202			// yes, move it $0202/3
+        iny
+        lda (BUFPNT),y
+        sta $0203
+// go back to the loop to read next sector from $0202/3
+L0552:  jmp L0318
+
+// after last sector transfer
+L0523:  lda #$00
+        ldx $3B				// restore stack pointer
+        txs
+        pha					// push 0 (no error?)
+// end of fastload, indicate no more data
+L0535:  ldy #$17
+        sty $4002
+L053A:  lda $4000			// some kind of long ack?
+        iny
+        bne L053A
+        jsr LF145			// drive init (some initial part skipped)
+        pla					// pop 0 (pushed in $0523) - no error?
+        beq L0574			// no error
+        jmp LE781			// print error into message buffer, go back to the mainloop
+// exit from fastloader with no error // XXX would be faster to go back to mainloop?
+L0574:  jmp     ($FFFC)		// system reset vector
+
+/// support procedures needed to move the head (SpeedDOS does this with a command byte)
+
+// move head from current track ($29 decoded from a header) to desired ($0202)
+L03E4:  lda $0202
+		cmp $29
+		bne !+
+		rts
+!:		ldx #$00
+        sec
+        sbc $29
+        beq L0422
+        bcs L03F6
+        eor #$FF
+        adc #$01
+        ldx #$01
+L03F6:  stx L03FC
+        asl
+        tax
+L03FB:  lda L03FC
+        eor $01
+        sec
+        rol
+        and #$03
+        eor $01
+        sta $01
+        stx L057A
+        ldy #$04
+L040C:  ldx #$00
+L040E:  lda $4000
+        lda $4000			// why reading twice? XXX
+        dex
+        bne L040E
+        dey
+        bne L040C
+        ldx L057A
+        dex
+        bne L03FB
+        stx $7A
+
+L0422:  lda $0202			// copy desired track to $29 (but we're already there?)
+        sta $29
+        sta $79
+        ldx #$04
+L042B:  cmp $F119,x			// density zone selector
+        dex
+        bcs L042B
+        txa
+        asl
+        asl
+        asl
+        asl
+        asl
+        sta $38
+        lda $01
+        and #$9F
+        ora $38
+        sta $01
+        rts
+
+// read header + decode with ROM, copy decoded track ($1A) to $29 - needed only to get current track number
+// to figure out over which track we are now
+// (used once)
+L0475:  jsr L0442			// read header (GCR) to $0111
+        jsr LF388			// decode GCR to BIN into HEADER
+        lda TRACK			// decoded track
+        sta $29				// is the current track now
+L047F:  lda $4002
+        bmi L047F
+        rts
+
+// read header
+// (used once)
+L0442:  lda #$5A			// attempt counter, no error reported anyhow if reached
+        sta L057A
+L0447:  dec L057A
+        bne L044C
+L044C:  jsr L0485			// wait for sync
+!:		bit $01
+		bpl !-
+        bit $4000
+        lda $4001
+        cmp #$52			// header?
+        bne L0447			// no, try again
+        sta $0111			// yes, keep data and read the rest
+        ldy #$01
+L0462:
+!:		bit $01
+		bpl !-
+        bit $4000
+        lda $4001
+        sta $0111,y			// GCR-encoded header at $0111
+        iny
+        cpy #8				// hdrsize
+        bne L0462
+        rts
+
+// wait for sync, this is a copy of $f560 that doesn't exit through error routine back to mainloop if timeout
+// (used once)
+L0485:  ldy #$12
+L0487:  ldx #$FF
+L0489:  lda $4002
+        and #$40
+        beq L0496
+        dex
+        bne L0489
+        dey
+        bne L0487
+L0496:  lda $4001
+        bit $4000
+        ldy #$00
+        rts

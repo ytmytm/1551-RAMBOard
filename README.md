@@ -2,7 +2,11 @@
 
 This project adds **8K of RAM** and **8K of extra ROM space** to a **Commodore 1551** disk drive by replacing the ROM with a small daughterboard. The extra memory is used by a ROM patch to implement a simple **track cache**: read an entire track once, then serve subsequent sector reads from RAM.
 
-![1551-RAMBOard][ PCB](media/01.pcb.png)
+A 27x fastloader is provide (HypaRAM).
+
+The mod is detected and utilized by [Parobek ROM](https://github.com/ytmytm/plus4-parobek).
+
+![1551-RAMBOard PCB]media/01.pcb.png)
 
 ## What you get
 
@@ -36,6 +40,22 @@ This board plugs into the original ROM socket and adds:
 `RAM_A13` and `RAM_A14` jumpers are configured in such a way that you can plug in either SRAM 6264 (8K) or 62256 (32K) with no other changes.
 If a method to latch two bits for the necessary port selection is found, then with 62256 (32K) four banks of 8K could be selected - e.g. for a permanent cache of the directory track.
 
+### Quickstart
+
+1. Install the hardware and keep J1 open
+2. Use a 27E512 ROM with provided 64K ROM file
+3. Try running a simple BASIC program to read the ROM at `$a000` - with J1 open it should be the top, patched half with `RAM` signature
+4. If you see `RAM` in the output and you can load the directory then everything works - directory track was already put into cache
+
+```
+10 open 15,8,15,"m-r"+chr$(0)+chr$(160)+chr$(3)
+20 for i=1 to 3
+30 get#15,b$
+40 print asc(b$);b$
+50 next
+60 close 15
+```
+
 ## Project files (KiCad)
 
 - [KiCad project](kicad/1551-RAMBoard-FirstBank/)
@@ -62,7 +82,8 @@ build.bat
 
 This will produce:
 
-- `1551.318008-01-patched.bin` (patched ROM image)
+- `1551.318008-01-patched.bin` (patched 32K ROM image)
+- `1551.318008-01-64k.bin` (64K ROM image for EPROM: stock ROM in the bottom half and patched ROM in the top half)
 
 ### Linux (Makefile)
 
@@ -72,6 +93,7 @@ This will produce:
 - Java
 - [KickAssembler](http://www.theweb.dk/KickAssembler/Main.html#frontpage) at `tools/KickAss.jar`
 - `curl` or `wget` (optional; used to auto-download the ROM)
+- `acme` (optional; used to build example wedge fastloader HypaRAM)
 
 **Build**
 
@@ -79,7 +101,38 @@ This will produce:
 make
 ```
 
-The default target builds `rampatch.prg` and will also produce `1551.318008-01-patched.bin`. If `rom/1551.318008-01.bin` is missing, it will be downloaded automatically.
+The default target builds both `1551.318008-01-patched.bin` (32K) and `1551.318008-01-64k.bin` (64K):
+
+The 64K image is suitable for 27C512/27E512 EPROMs with:
+- First 16K: $ff bytes (EPROM neutral)
+- Next 16K: stock 1551 ROM
+- Upper 32K: patched 1551 ROM
+
+## HypaRAM fastloader wedge
+
+An example fastloader wedge called **HypaRAM** is included in the `src/` directory as `hypainstall14f0.s`, which
+generates `hyparam_1551.prg`.
+
+When loaded it will intercept LOAD operations and will run the fastloader embedded in the patched drive ROM directly.
+With track cache the speedup is approximately **27x** relative to 1541 and **7x** relative to stock 1551.
+
+For simplicity it supports only device #8 and doesn't check if the ROM was patched.
+
+### Building HypaRAM
+
+To build the binary `hyparam_1551.prg`, you need the [ACME assembler](https://sourceforge.net/projects/acme-crossass/).
+
+- **Windows**:  
+  ```
+  acme hypainstall14f0.s
+  ```
+
+- **Linux/Unix/WSL**:  
+  ```
+  make
+  ```
+
+The produced binary `hyparam_1551.prg` can be loaded into C16/+4 emulators or real hardware with the RAMBoard installed.
 
 ## Testing in VICE (optional)
 
@@ -93,9 +146,9 @@ This repo contains `docs/vice-1551-ram-expansion.patch`, which documents the cha
 The patched ROM contains a small fixed-location signature and a public jump table:
 
 - `$A000-$A002`: ASCII signature `"RAM"` (used to detect that the patched ROM is active)
-- `$A003...`: jump table entries (currently mostly reserved; the "fastloader" entry is a stub for now, it will probably use [HypaLoad v4.7](https://plus4world.powweb.com/software/Hypaload_1551) code)
+- `$A003...`: jump table entries
 
-This will be used by the [Parobek ROM](https://github.com/ytmytm/plus4-parobek).
+This is used by the HypaRAM fastloader and [Parobek ROM](https://github.com/ytmytm/plus4-parobek).
 
 ## Theory of operation
 

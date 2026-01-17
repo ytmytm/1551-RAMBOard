@@ -28,10 +28,12 @@ jobs:
         run: |
           curl http://theweb.dk/KickAssembler/KickAssembler.zip -H 'User-Agent: Hi There' --output KickAssembler.zip
           unzip KickAssembler.zip
+          mkdir -p tools
+          cp KickAss.jar tools/KickAss.jar
 
-      # Build ROMs
-      - name: Patch standalone 1551 ROM
-        run: java -jar KickAss.jar rampatch.asm -showmem -define ROM1551
+      # Build ROMs using Makefile
+      - name: Build ROMs
+        run: make
 
       # Upload artifacts
       - name: Archive patched 1551 ROM
@@ -39,3 +41,9 @@ jobs:
         with:
           name: 1551.318008-01-patched.bin
           path: 1551.318008-01-patched.bin
+
+      - name: Archive 64K ROM image
+        uses: actions/upload-artifact@v4
+        with:
+          name: 1551.318008-01-64k.bin
+          path: 1551.318008-01-64k.bin
