@@ -11,8 +11,18 @@ ROM_FILE = $(ROM_DIR)/1551.318008-01.bin
 ROM_URL = https://www.zimmers.net/anonftp/pub/cbm/firmware/drives/new/1551/1551.318008-01.bin
 LIB_DIR = lib
 
+# Patched ROM file
+PATCHED_ROM = 1551.318008-01-patched.bin
+
+# 64K ROM image for EPROM (27C512/27E512)
+ROM_64K = 1551.318008-01-64k.bin
+
+# Fastloader wedge (optional, requires acme)
+HYPARAM_PRG = hyparam_1551.prg
+HYPARAM_SRC = src/hypainstall14f0.s
+
 # Default target
-all: $(OUTPUT)
+all: $(OUTPUT) $(ROM_64K) $(HYPARAM_PRG)
 
 # Main build target
 $(OUTPUT): $(ASM_FILE) $(KICKASS_JAR) $(ROM_FILE)
@@ -45,7 +55,7 @@ $(KICKASS_JAR):
 
 # Clean build artifacts
 clean:
-	rm -f $(OUTPUT) $(LOG_FILE) rampatch.sym rampatch.vs
+	rm -f $(OUTPUT) $(LOG_FILE) rampatch.sym rampatch.vs $(HYPARAM_PRG)
 	@echo "Cleaned build artifacts"
 
 # Clean everything (but keep ROM)
@@ -112,13 +122,53 @@ xplus4-disk: vice-setup
 # Phony targets
 .PHONY: all clean distclean vice-setup xplus4 xplus4-disk test
 
-# Patched ROM file
-PATCHED_ROM = 1551.318008-01-patched.bin
-
 # Target to build the patched 32K ROM
 $(PATCHED_ROM): $(ASM_FILE) $(KICKASS_JAR) $(ROM_FILE)
 	@echo "Building patched 32K ROM $(PATCHED_ROM)..."
 	java -jar $(KICKASS_JAR) $(ASM_FILE) -log $(LOG_FILE) -vicesymbols -showmem -afo -symbolfiledir . -libdir $(LIB_DIR)
+
+# 64K ROM image for EPROM (27C512/27E512)
+# Layout:
+# - First 16K: $ff (EPROM neutral)
+# - Next 16K: stock 1551 ROM
+# - Upper 32K: patched 1551 ROM
+$(ROM_64K): $(PATCHED_ROM) $(ROM_FILE)
+	@echo "Building 64K ROM image $(ROM_64K)..."
+	@# Create 16K of $ff bytes (EPROM neutral)
+	@dd if=/dev/zero bs=16384 count=1 2>/dev/null | tr '\000' '\377' > $(ROM_64K) || \
+	 (printf '\377%.0s' {1..16384} > $(ROM_64K) 2>/dev/null || \
+	  (echo "Error: Need dd or printf to create 64K ROM" && exit 1))
+	@# Append 16K of stock ROM
+	@dd if=$(ROM_FILE) bs=16384 count=1 >> $(ROM_64K) 2>/dev/null || \
+	 (head -c 16384 $(ROM_FILE) >> $(ROM_64K) 2>/dev/null || \
+	  (echo "Error: Failed to append stock ROM" && exit 1))
+	@# Append 32K of patched ROM
+	@dd if=$(PATCHED_ROM) bs=32768 count=1 >> $(ROM_64K) 2>/dev/null || \
+	 (head -c 32768 $(PATCHED_ROM) >> $(ROM_64K) 2>/dev/null || \
+	  (echo "Error: Failed to append patched ROM" && exit 1))
+	@# Verify size is 64K
+	@SIZE=$$(wc -c < $(ROM_64K) 2>/dev/null || stat -f%z $(ROM_64K) 2>/dev/null || stat -c%s $(ROM_64K) 2>/dev/null || echo 0); \
+	 if [ $$SIZE -ne 65536 ]; then \
+		echo "Error: $(ROM_64K) size is $$SIZE, expected 65536"; \
+		rm -f $(ROM_64K); \
+		exit 1; \
+	 fi
+	@echo "64K ROM image created: $(ROM_64K)"
+
+$(HYPARAM_PRG): $(HYPARAM_SRC)
+	@if command -v acme >/dev/null 2>&1; then \
+		echo "Building fastloader wedge $(HYPARAM_PRG)..."; \
+		cd src && acme hypainstall14f0.s; \
+		if [ -f $(HYPARAM_PRG) ]; then \
+			mv $(HYPARAM_PRG) ../$(HYPARAM_PRG); \
+			echo "Fastloader wedge created: $(HYPARAM_PRG)"; \
+		else \
+			echo "Warning: acme did not produce $(HYPARAM_PRG)"; \
+		fi; \
+	else \
+		echo "Note: acme not found, skipping fastloader wedge build"; \
+		echo "      Install acme to build $(HYPARAM_PRG)"; \
+	fi
 
 # Run test with patched 32K ROM and RAM expansion enabled
 test: $(PATCHED_ROM) vice-setup

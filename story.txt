@@ -3,11 +3,10 @@ These are my notes, a project diary. I highly recommend this practice!
 (continuing from 1571-TrackCacheROM)
 (continuing from 1541-RAMBOard-FirstBank)
 
-(TODO #2)
-In general we also need a 64k image generated - patched bottom 32K, 16K of $ff and 16K of original DOS
-(TODO #4)
-Patch Parobek to detect signature 'RAM' and jump to M-E,$A003 instead of sending the drivecode
-then use HypaRAM reference code as loader (close to tcbm2sd fastloader protocol)
+[2026-01-17]
+Checked against real hardware and [Parobek](https://github.com/ytmytm/plus4-parobek)
+Added 64K ROM target to be used directly in the project.
+HypaRAM is now present in src/ but the fastloader is already supported by Parobek.
 
 [2026-01-12]
 Even faster fastloader by zero-copying on the drive side, just point to the cached sector and transfer from there.
