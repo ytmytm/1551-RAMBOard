@@ -2,17 +2,23 @@
 
 This project adds **8K of RAM** and **8K of extra ROM space** to a **Commodore 1551** disk drive by replacing the ROM with a small daughterboard. The extra memory is used by a ROM patch to implement a simple **track cache**: read an entire track once, then serve subsequent sector reads from RAM.
 
-A 27x fastloader is provide (HypaRAM).
+A 27x fastloader is provided (HypaRAM).
 
 The mod is detected and utilized by [Parobek ROM](https://github.com/ytmytm/plus4-parobek).
 
-![1551-RAMBOard PCB]media/01.pcb.png)
+<img src="media/01.pcb.png" width=640 alt="1551-RAMBOard PCB">
 
 ## What you get
 
 - **RAM expansion**: `$8000-$9FFF` (8K) mapped to SRAM on the daughterboard.
 - **Extra ROM window**: `$A000-$BFFF` (8K) mapped to the *upper* part of a larger ROM image.
 - **Two DOS ROMs**: with a 64K ROM chip, you can add a switch to select either the stock 1551 ROM or the patched ROM
+- **HypaRAM**: fastloader
+
+<a href="https://www.youtube.com/watch?v=xZMYda7cszA" target="_blank">
+ <img src="https://img.youtube.com/vi/xZMYda7cszA/mqdefault.jpg" alt="HypaRAM loading 220 block file"
+ <p><small>Click for HypaRAM demonstration, loading a 220 block file</small></p>
+</a>
 
 ## Hardware
 
@@ -152,6 +158,12 @@ This is used by the HypaRAM fastloader and [Parobek ROM](https://github.com/ytmy
 
 ## Theory of operation
 
+### Address space
+
+The onboard logic enables ROM only in `$C000-$FFFF` range. We ignore this signal and instead use CPU's A15 line as a trigger which signals that `$8000-$FFFF` range is being accessed.
+
+The 74LS139 logic uses A14 to further divide that range to generate chip select signals for RAM in `$8000-$9FFF` range and for ROM in `$A000-$FFFF`.
+
 ### Track cache logic
 
 When the drive firmware requests a sector read:
@@ -169,3 +181,4 @@ Unlike 1541-class drives, the 1551 ROM already decodes GCR **on the fly** during
 
 - design for 1541: [**1541-RAMBOard**](https://github.com/ytmytm/1541-RAMBOard-FirstBank)
 - design for 1571: [**1571 Track Cache ROM**](https://github.com/ytmytm/1571-TrackCacheROM)
+
