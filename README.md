@@ -2,7 +2,7 @@
 
 This project adds **8K of RAM** and **8K of extra ROM space** to a **Commodore 1551** disk drive by replacing the ROM with a small daughterboard. The extra memory is used by a ROM patch to implement a simple **track cache**: read an entire track once, then serve subsequent sector reads from RAM.
 
-A 27x (relative to 1541) / 7x (relateive to 1551) fastloader is provided.
+A 27x (relative to 1541) / 7x (relative to 1551) fastloader is provided.
 
 The mod and patched ROM are detected and utilized by [Parobek ROM](https://github.com/ytmytm/plus4-parobek).
 
@@ -233,5 +233,6 @@ Unlike 1541-class drives, the 1551 ROM already decodes GCR **on the fly** during
 
 - design for 1541: [**1541-RAMBOard**](https://github.com/ytmytm/1541-RAMBOardII)
 - design for 1571: [**1571 Track Cache ROM**](https://github.com/ytmytm/1571-TrackCacheROM)
+
 
 
