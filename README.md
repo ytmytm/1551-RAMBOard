@@ -10,6 +10,8 @@ The mod and patched ROM are detected and utilized by [Parobek ROM](https://githu
 
 <img src="media/14.connections.jpg" width=640 alt="RAMBOard installed in a 1551">
 
+<a href="https://www.pcbway.com/project/shareproject/1551_RAMBOard_c846331a.html"><img src="https://www.pcbway.com/project/img/images/frompcbway-1220.png" alt="PCB from PCBWay" /></a>
+
 ## What you get
 
 - **RAM expansion**: `$8000-$9FFF` (8K) mapped to SRAM on the daughterboard.
@@ -21,8 +23,8 @@ The mod and patched ROM are detected and utilized by [Parobek ROM](https://githu
 ## Videos
 
 <a href="https://www.youtube.com/watch?v=vWi2URbmIlo" target="_blank">
- <img src="https://img.youtube.com/vi/vWi2URbmIlo/mqdefault.jpg" alt="HypaRAM loading 220 block file"
- <p><small>Click for 1551 demonstration, loading a 103 block file</small></p>
+ <img src="https://img.youtube.com/vi/vWi2URbmIlo/mqdefault.jpg" alt="Parobek loading 108 block file"
+ <p><small>Click for 1551 demonstration, loading a 108 block file</small></p>
 </a>
 
 <a href="https://www.youtube.com/watch?v=xZMYda7cszA" target="_blank">
@@ -229,6 +231,7 @@ Unlike 1541-class drives, the 1551 ROM already decodes GCR **on the fly** during
 
 ## Related
 
-- design for 1541: [**1541-RAMBOard**](https://github.com/ytmytm/1541-RAMBOard-FirstBank)
+- design for 1541: [**1541-RAMBOard**](https://github.com/ytmytm/1541-RAMBOardII)
 - design for 1571: [**1571 Track Cache ROM**](https://github.com/ytmytm/1571-TrackCacheROM)
+
 
