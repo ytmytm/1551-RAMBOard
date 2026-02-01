@@ -3,6 +3,12 @@ These are my notes, a project diary. I highly recommend this practice!
 (continuing from 1571-TrackCacheROM)
 (continuing from 1541-RAMBOard-FirstBank)
 
+[2026-01-28]
+Nightrider has confirmed that indeed this works on the real hardware, providing photos and video evidence. Very cool that something that
+was 100% virtual and emulated works as expected.
+Pi1551 video: https://www.youtube.com/watch?v=xZMYda7cszA
+1551 video: https://www.youtube.com/watch?v=vWi2URbmIlo
+
 [2026-01-17]
 Checked against real hardware and [Parobek](https://github.com/ytmytm/plus4-parobek)
 Added 64K ROM target to be used directly in the project.

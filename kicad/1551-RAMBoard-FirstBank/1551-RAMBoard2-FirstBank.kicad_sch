@@ -4259,7 +4259,7 @@
 		)
 		(uuid "08d331e8-9600-4ee2-8fac-c411ddc369c8")
 	)
-	(text "J2:\n- A14 from CPU (U2) pin 21 or U7 pin 7\n- A15 from CPU (U2) pin 22 or U7 pin 6\n- R/~{W} from onboard RAM (U5) pin 21 or\n  or gate array (U6) pin 31(?)\n  or U3 pin 19(?)"
+	(text "J2:\n- A14 from CPU (U2) pin 21 or U7 pin 7\n- A15 from CPU (U2) pin 22 or U7 pin 6\n- R/~{W} from onboard RAM (U5) pin 21 or\n  or U3 pin 19"
 		(exclude_from_sim no)
 		(at 20.32 146.05 0)
 		(effects
