@@ -3,6 +3,15 @@ These are my notes, a project diary. I highly recommend this practice!
 (continuing from 1571-TrackCacheROM)
 (continuing from 1541-RAMBOard-FirstBank)
 
+[2024-06-15]
+While working on Pi1551 project I discovered that games like 'Corruption' and 'Fish' were not compatible with this ROM,
+even though they use ROM routines for disk access.
+The reason for this was that they have to detect disk side change, but they do it by comparing expected ID against
+header buffer ($18/$19) instead of DOS-preserved disk ID ($14/$15). We reuse $18/$19 as a zero-page pointer when
+reading track and when returning data from cache, so it was broken.
+Changed the ROM to use $16/$17 as a pointer - this is disk ID of non-existing drive unit 1, that stayed in DOS ROM
+since the ancient PET times - even survived overhaul for TCBM drive.
+
 [2026-01-28]
 Nightrider has confirmed that indeed this works on the real hardware, providing photos and video evidence. Very cool that something that
 was 100% virtual and emulated works as expected.
