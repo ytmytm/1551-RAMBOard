@@ -47,6 +47,7 @@
 .const LF50E = $F50E // 'ok' ending of read sector, A=1, jump to FA12 - error message
 .const LF513 = $F513 // wait for header and then for sync (F560), patched instruction at $F403
 .const LF560 = $F560 // wait for sync, set Y to 0
+.const LFDE1 = $FDE1 // Super DOS dynamic sector count / density-zone selector
 .const LFA12 = $FA12 // error number in A
 
 // GCR decoding tables from 1551 ROM
@@ -683,10 +684,14 @@ L040E:  lda $4000
 L0422:  lda $0202			// copy desired track to $29 (but we're already there?)
         sta $29
         sta $79
+#if SUPERDOS1551
+        jsr LFDE1			// Super DOS: honor $5E mode; returns density zone in X
+#else
         ldx #$04
 L042B:  cmp $F119,x			// density zone selector
         dex
         bcs L042B
+#endif
         txa
         asl
         asl
