@@ -13,17 +13,21 @@ on:
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
   build:
-    # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v4
 
-      # Download KickAss
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y acme
+
       - name: Download KickAss
         run: |
           curl http://theweb.dk/KickAssembler/KickAssembler.zip -H 'User-Agent: Hi There' --output KickAssembler.zip
@@ -31,19 +35,60 @@ jobs:
           mkdir -p tools
           cp KickAss.jar tools/KickAss.jar
 
-      # Build ROMs using Makefile
-      - name: Build ROMs
+      - name: Build all outputs
         run: make
 
-      # Upload artifacts
-      - name: Archive patched 1551 ROM
+      - name: Verify build outputs
+        run: |
+          test -f 1551.318008-01-patched.bin
+          test -f 1551.318008-01-64k.bin
+          test -f super_dos_1551-patched.bin
+          test -f super_dos_1551-64k.bin
+          test -f hyparam_1551.prg
+          ls -la \
+            1551.318008-01-patched.bin \
+            1551.318008-01-64k.bin \
+            super_dos_1551-patched.bin \
+            super_dos_1551-64k.bin \
+            hyparam_1551.prg
+
+      - name: Archive stock patched 32K ROM
         uses: actions/upload-artifact@v4
         with:
           name: 1551.318008-01-patched.bin
           path: 1551.318008-01-patched.bin
 
-      - name: Archive 64K ROM image
+      - name: Archive stock 64K ROM image
         uses: actions/upload-artifact@v4
         with:
           name: 1551.318008-01-64k.bin
           path: 1551.318008-01-64k.bin
+
+      - name: Archive SuperDOS patched 32K ROM
+        uses: actions/upload-artifact@v4
+        with:
+          name: super_dos_1551-patched.bin
+          path: super_dos_1551-patched.bin
+
+      - name: Archive SuperDOS 64K ROM image
+        uses: actions/upload-artifact@v4
+        with:
+          name: super_dos_1551-64k.bin
+          path: super_dos_1551-64k.bin
+
+      - name: Archive HypaRAM wedge
+        uses: actions/upload-artifact@v4
+        with:
+          name: hyparam_1551.prg
+          path: hyparam_1551.prg
+
+      - name: Archive all build outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: 1551-ramboard-build
+          path: |
+            1551.318008-01-patched.bin
+            1551.318008-01-64k.bin
+            super_dos_1551-patched.bin
+            super_dos_1551-64k.bin
+            hyparam_1551.prg
