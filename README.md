@@ -17,6 +17,7 @@ The mod and patched ROM are detected and utilized by [Parobek ROM](https://githu
 - **RAM expansion**: `$8000-$9FFF` (8K) mapped to SRAM on the daughterboard.
 - **Extra ROM window**: `$A000-$BFFF` (8K) mapped to the *upper* part of a larger ROM image.
 - **Two DOS ROMs**: with a 64K ROM chip, you can add a switch to select either the stock 1551 ROM or the patched ROM
+- **Two patched variants**: stock 1551 (318008-01) and [SuperDOS](https://plus4world.powweb.com/dl/utils/s/super_dos_1551.rom) (40-track disks)
 - **HypaRAM**: fastloader
 - **Parobek support**: even faster fastloader startup when drivecode is embedded in patched ROM
 
@@ -65,7 +66,7 @@ This board plugs into the original ROM socket and adds:
 
 2. Solder the remaining components: two resistors, then the sockets.
 
-3. Flash the EEPROM with the ROM image from the Releases tab. The 64K image contains the patched ROM in the top half (selected by default when `J1` is open), so you do not need to connect the switch yet.
+3. Flash the EEPROM with a ROM image from the Releases tab (or build your own with `make`). Use `1551.318008-01-64k.bin` for stock DOS or `super_dos_1551-64k.bin` for SuperDOS 40-track support. The 64K image contains the patched ROM in the top half (selected by default when `J1` is open), so you do not need to connect the switch yet.
 
 4. Insert the chips into their sockets.
 
@@ -97,7 +98,7 @@ If a method to latch two bits for the necessary port selection is found, then wi
 ### Quickstart
 
 1. Install the hardware and keep J1 open
-2. Use a 27E512 ROM with provided 64K ROM file
+2. Use a 27E512 ROM with a 64K image from Releases (`1551.318008-01-64k.bin` or `super_dos_1551-64k.bin`)
 3. Try running a simple BASIC program to read the ROM at `$a000` - with J1 open it should be the top, patched half with `RAM` signature
 4. If you see `RAM` in the output and you can load the directory then everything works - directory track was already put into cache
 
@@ -120,7 +121,18 @@ Everything you need is attached to the Release page too.
 
 ## Firmware patch / build
 
-The patcher is a single KickAssembler source file: `rampatch.asm`.
+The patcher is a single KickAssembler source file: `rampatch.asm`. It can patch either the stock 1551 ROM or SuperDOS 1551; the Makefile selects the base ROM via KickAssembler `-define` flags (`ROM1551` or `SUPERDOS1551`).
+
+SuperDOS is the only other common 1551 DOS alternative. It adds 40-track disk support (similar in spirit to C64 SpeedDOS/DolphinDOS). The RAMBOard hook sites do not overlap with SuperDOS changes, so the same track-cache patch applies cleanly. Patch4 (ROM checksum bypass) is omitted for the SuperDOS build because SuperDOS already NOPs that routine.
+
+### Source ROMs
+
+Place these in `rom/` (or let `make` download them):
+
+| File | Description |
+|------|-------------|
+| `rom/1551.318008-01.bin` | Stock 1551 DOS ([zimmers.net](https://www.zimmers.net/anonftp/pub/cbm/firmware/drives/new/1551/1551.318008-01.bin)) |
+| `rom/super_dos_1551.bin` | SuperDOS 1551, 40 tracks ([plus4world](https://plus4world.powweb.com/dl/utils/s/super_dos_1551.rom)) |
 
 ### Windows (build.bat)
 
@@ -128,7 +140,7 @@ The patcher is a single KickAssembler source file: `rampatch.asm`.
 
 - Java
 - [KickAssembler](http://www.theweb.dk/KickAssembler/Main.html#frontpage) at `tools/KickAss.jar`
-- Stock 1551 ROM at `rom/1551.318008-01.bin` (downloaded from [zimmers.net](https://www.zimmers.net/anonftp/pub/cbm/firmware/drives/new/1551/1551.318008-01.bin))
+- Stock 1551 ROM at `rom/1551.318008-01.bin`
 
 **Build**
 
@@ -136,10 +148,12 @@ The patcher is a single KickAssembler source file: `rampatch.asm`.
 build.bat
 ```
 
-This will produce:
+This builds the stock-ROM variant only:
 
-- `1551.318008-01-patched.bin` (patched 32K ROM image)
-- `1551.318008-01-64k.bin` (64K ROM image for EPROM: stock ROM in the bottom half and patched ROM in the top half)
+- `1551.318008-01-patched.bin` — patched 32K ROM image
+- `1551.318008-01-64k.bin` — 64K EPROM image (stock ROM in the lower half, patched ROM in the upper half)
+
+For the SuperDOS variant, use the Linux Makefile (or invoke KickAssembler manually with `-define SUPERDOS1551`).
 
 ### Linux (Makefile)
 
@@ -148,21 +162,40 @@ This will produce:
 - `make`
 - Java
 - [KickAssembler](http://www.theweb.dk/KickAssembler/Main.html#frontpage) at `tools/KickAss.jar`
-- `curl` or `wget` (optional; used to auto-download the ROM)
-- `acme` (optional; used to build example wedge fastloader HypaRAM)
+- [ACME](https://sourceforge.net/projects/acme-crossass/) assembler (`acme`)
+- `curl` or `wget` (optional; used to auto-download source ROMs)
 
-**Build**
+**Build everything**
 
 ```sh
 make
 ```
 
-The default target builds both `1551.318008-01-patched.bin` (32K) and `1551.318008-01-64k.bin` (64K):
+This produces all deliverables:
 
-The 64K image is suitable for 27C512/27E512 EPROMs with:
-- First 16K: $ff bytes (EPROM neutral)
-- Next 16K: stock 1551 ROM
-- Upper 32K: patched 1551 ROM
+| Output | Description |
+|--------|-------------|
+| `1551.318008-01-patched.bin` | Patched 32K ROM (stock 1551 base) |
+| `1551.318008-01-64k.bin` | 64K EPROM image (stock + patched) |
+| `super_dos_1551-patched.bin` | Patched 32K ROM (SuperDOS 40-track base) |
+| `super_dos_1551-64k.bin` | 64K EPROM image (SuperDOS + patched) |
+| `hyparam_1551.prg` | HypaRAM fastloader wedge |
+
+**Other targets**
+
+```sh
+make help          # list all targets
+make superrom      # SuperDOS patched 32K + 64K images only
+make clean         # remove all build outputs (keeps source ROMs in rom/)
+make test          # VICE xplus4 with stock patched ROM + RAM expansion
+make test-super    # VICE xplus4 with SuperDOS patched ROM + RAM expansion
+```
+
+Each 64K image is suitable for 27C512/27E512 EPROMs:
+
+- First 16K: `$FF` bytes (EPROM neutral)
+- Next 16K: unpatched base ROM (stock or SuperDOS)
+- Upper 32K: patched ROM with track cache and fastloader
 
 ## HypaRAM fastloader wedge
 
@@ -174,7 +207,7 @@ With track cache the speedup is approximately **27x** relative to 1541 and **7x*
 
 For simplicity it supports only device #8 and doesn't check if the ROM was patched.
 
-The same fastloader i embedded in [Parobek ROM](https://github.com/ytmytm/plus4-parobek) and will be autodetected for LOAD operations.
+The same fastloader is embedded in [Parobek ROM](https://github.com/ytmytm/plus4-parobek) and will be autodetected for LOAD operations.
 
 ### Building HypaRAM
 

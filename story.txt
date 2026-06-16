@@ -3,6 +3,12 @@ These are my notes, a project diary. I highly recommend this practice!
 (continuing from 1571-TrackCacheROM)
 (continuing from 1541-RAMBOard-FirstBank)
 
+[2024-06-16]
+There is only one other 1551 alternative DOS: SuperDOS, which brings support for 40 track disks, similar to C64's SpeedDOS/DolphinDOS.
+Areas altered by that version don't overlap with my changes except for Patch4, which disables checksum checking. I made a minimal
+change, they have NOP-ed out everything.
+The SuperDOS-1551-RAMBOard is now built too.
+
 [2024-06-15]
 While working on Pi1551 project I discovered that games like 'Corruption' and 'Fish' were not compatible with this ROM,
 even though they use ROM routines for disk access.

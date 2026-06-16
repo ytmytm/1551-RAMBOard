@@ -13,7 +13,9 @@
 // uncomment one of the definitions below or pass them to KickAss as a command line option, e.g. -define ROM1551
 
 // 1551
-#define ROM1551
+//#define ROM1551
+// or SuperDOS 1551
+//#define SUPERDOS1551
 // no other alternative ROMs for 1551
 
 // INFO
@@ -78,7 +80,7 @@
 
 /////////////////////////////////////
 
-#if !ROM1551
+#if !ROM1551 && !SUPERDOS1551
 .error "You have to choose ROM to patch"
 #endif
 
@@ -87,6 +89,16 @@
 .segmentdef Combined  [outBin="1551.318008-01-patched.bin", segments="Base,Patch1,Patch3,Patch4,Patch5,Patch7,MainPatch", allowOverlap]
 .segment Base [start = $8000, max=$ffff]
 	.var data = LoadBinary("rom/1551.318008-01.bin")
+	.fill $4000, $ff
+	.fill data.getSize(), data.get(i)
+#endif
+
+#if SUPERDOS1551
+.print "Assembling SuperDOS 1551 ROM"
+// without Patch4 as SuperDOS 1551 doesn't have a checksum routine
+.segmentdef Combined  [outBin="super_dos_1551-patched.bin", segments="Base,Patch1,Patch3,Patch5,Patch7,MainPatch", allowOverlap]
+.segment Base [start = $8000, max=$ffff]
+	.var data = LoadBinary("rom/super_dos_1551.bin")
 	.fill $4000, $ff
 	.fill data.getSize(), data.get(i)
 #endif
