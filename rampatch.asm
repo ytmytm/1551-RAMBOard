@@ -58,7 +58,7 @@
 // note: if these zero-page location would cause compatibility issues, they can be moved to RAMBUF page, just making code a bit larger
 //       the only exceptions are pointers bufpage/bufrest but these *may* be moved to workarea at BTAB ($F9)
 // DOS unused zp
-.const bufpage = $16	// (2) unused ID1/ID2 of drive 1; can't use HEADER+0 ($18/$19) because some loaders use that (instead of $14/$15) to detect disk change; pointer to page GCR data, increase by $0100
+.const bufpage = $18	// (2) can use HEADER+0 ($18/$19) but have to restore it from ID1/ID2 ($14/$15) because some loaders use that (instead of $14/$15) to detect disk change; pointer to page GCR data, increase by $0100
 .const counter = $1C	// (1) same as HEADER+4: header checksum before encoding; counter of read sectors, saved in RE_max_sector (alternatively use $4B DOS attempt counter for header find); written to by powerup routine at $EBBA (write protect drive 1), but that's ok
 .const hdroffs = $1D	// (1) (drive number, must be reset to 0) offset to header GCR data at RE_cached_headers during data read and header decoding
 //.const hdroffsold = $F5 // (1) (moved from zp to extra RAM) temp storage needed to compare current header with 1st read header
@@ -198,6 +198,11 @@ ReadCache:
 		lda (HDRPNT),y			// needed sector number
 		sta SECTOR				// fastloader might need it here (what F519 does)
 		jsr DoReadCache
+		// restore ID1/ID2
+		lda $14				// ID1
+		sta bufpage			// HEADER+0
+		lda $15				// ID2
+		sta bufpage+1		// HEADER+1
 		bcs !+
 		jmp LF50E				// we have data as if it came from the disk, continue in ROM, return 'ok'
 		// not found? fall back on ROM and try to read it again
